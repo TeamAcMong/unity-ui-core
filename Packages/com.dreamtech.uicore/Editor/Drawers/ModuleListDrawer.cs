@@ -68,12 +68,15 @@ namespace DreamTech.UICore.Editor.Drawers
             int count = listProperty.arraySize;
             if (count > 0)
             {
-                // Count badge
-                var badgeStyle = new GUIStyle(UIEditorStyles.Pill)
+                // Count badge — use DrawRect for bg instead of leaking Texture2D per frame
+                var badgeContent = new GUIContent(count.ToString());
+                Vector2 badgeSize = UIEditorStyles.Pill.CalcSize(badgeContent);
+                Rect badgeRect = GUILayoutUtility.GetRect(badgeSize.x + 6f, 16f, GUILayout.ExpandWidth(false));
+                if (Event.current.type == EventType.Repaint)
                 {
-                    normal = { background = UIEditorStyles.MakeTex(2, 2, new Color(accentColor.r, accentColor.g, accentColor.b, 0.22f)) },
-                };
-                GUILayout.Label(count.ToString(), badgeStyle, GUILayout.ExpandWidth(false));
+                    EditorGUI.DrawRect(badgeRect, new Color(accentColor.r, accentColor.g, accentColor.b, 0.22f));
+                }
+                GUI.Label(badgeRect, badgeContent, UIEditorStyles.Pill);
                 GUILayout.Space(4f);
             }
 
@@ -249,13 +252,11 @@ namespace DreamTech.UICore.Editor.Drawers
             EditorGUI.LabelField(nameRect, displayName, UIEditorStyles.ModuleCardHeader);
 
             Rect pillRect = new Rect(rightZoneStart - pillW, headerRow.y + (headerH - 16f) * 0.5f, pillW, 16f);
-            var pillBg = UIEditorStyles.MakeTex(2, 2, new Color(accentColor.r, accentColor.g, accentColor.b, 0.18f));
-            var pillStyle = new GUIStyle(UIEditorStyles.Pill)
+            if (Event.current.type == EventType.Repaint)
             {
-                normal   = { background = pillBg, textColor = isPro ? new Color(0.75f, 0.75f, 0.75f) : new Color(0.30f, 0.30f, 0.30f) },
-                fontSize = 9,
-            };
-            GUI.Label(pillRect, typeName, pillStyle);
+                EditorGUI.DrawRect(pillRect, new Color(accentColor.r, accentColor.g, accentColor.b, 0.18f));
+            }
+            GUI.Label(pillRect, typeName, UIEditorStyles.Pill);
 
             // Chevron indicator (decorative, drawn last so it sits on top if any text bleeds)
             GUI.color = new Color(1f, 1f, 1f, 0.65f);

@@ -5,6 +5,36 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-05-22
+
+### Fixed
+
+- **[HIGH-1] SubclassSelectorDrawer popup callback null-guard** — All `ShowSearchablePopup` and `ShowTypeMenu` callbacks now guard `if (so == null) return` before accessing the captured `SerializedObject`. Previously, if the Inspector was destroyed or the selection changed before the GenericMenu callback fired, the lambda would dereference a disposed `SerializedObject` and throw `NullReferenceException`. The existing `prop == null` guard was retained; `so == null` is now checked first.
+
+- **[HIGH-2] UIEditorStyles reinit on skin change (Dark ↔ Light)** — `Init()` now tracks `_lastKnownIsProSkin`. If the editor skin changes while the cached styles are still alive (user toggles Dark/Light at runtime), `Dispose()` is called first and all styles/textures are rebuilt. Previously switching skins left all colour values stale until the next domain reload.
+
+- **[MEDIUM-1] DrawSectionCard whole-header clickable** — The section header row is now allocated via `GetControlRect(false, 20f)` as a single rect. A `MouseDown` on any part of the row toggles the foldout, not just the 16×16 arrow icon. The arrow is now a decorative label (not a Button), eliminating the invisible hit-area ambiguity. A subtle hover tint is drawn during `Repaint` to communicate clickability.
+
+- **[MEDIUM-2] DrawHelpCard cached style** — `msgStyle` (previously `new GUIStyle(...)` on every `OnInspectorGUI` call) is now a static cached `_helpCardMessage` field in `UIEditorStyles`, initialised once in `Init()`. Accessible via `UIEditorStyles.HelpCardMessage`.
+
+- **[MEDIUM-3] DrawPill texture leak eliminated** — `DrawPill` previously called `UIEditorStyles.MakeTex(2, 2, ...)` on every frame, allocating a `Texture2D` that was never freed. Replaced with `EditorGUI.DrawRect` on the pill's rect during `Repaint`; the `Pill` GUIStyle is used only for text layout/color, not background.
+
+- **[MEDIUM-3 extension] ModuleListDrawer count badge + type pill texture leaks** — same `MakeTex` per-frame leak pattern as `DrawPill`, applied to two more render paths in `ModuleListDrawer` (count badge at the top of the list, and the per-card type pill). Both replaced with `EditorGUI.DrawRect` during `Repaint`.
+
+- **[MEDIUM-4] Keyboard navigation off-by-one with headers** — `_keyboardIndex` previously tracked into `_visibleRows` (which includes header rows), causing Up/Down to land on headers and the highlight to skip visible rows. Introduced `_selectableIndices` (`List<int>`) that maps contiguous keyboard positions to non-header `_visibleRows` indices. `HandleKeyboard` and the row highlight check both use `_selectableIndices`. Rebuilt after every `RebuildRows` call with `_keyboardIndex` clamped to valid range.
+
+- **[MEDIUM-5] Focus steal loop in popup** — `EditorGUI.FocusTextInControl("SubclassSearch")` was called unconditionally on every `Repaint` event, preventing the user from typing after the first character because focus was immediately re-stolen. Added `_focusDone` bool; focus is requested only once per popup open (reset in `OnOpen()`).
+
+- **[MEDIUM-6 / LOW-3 / LOW-4] IMGUI layout-pass background flicker** — `DrawHeroHeader`, `DrawPlayModePanel`, and `DrawHelpCard` all captured the rect returned by `BeginVertical()` to draw a background colour. During the Layout pass IMGUI returns an empty rect (height = 0), causing a one-frame flicker where the background covered a zero-height strip. Fixed by moving all `EditorGUI.DrawRect` calls to `if (Event.current.type == EventType.Repaint)` blocks using `GUILayoutUtility.GetLastRect()` after `EndVertical()`, which always has the correct final height.
+
+- **[LOW-1] AccentColor / ErrorColor legacy aliases now theme-aware** — Previously `readonly Color` fields with hardcoded values that did not respond to Dark/Light skin changes. Converted to `static Color` properties that delegate to `Accent` and `DangerColor` respectively.
+
+- **[LOW-2] GetDisplayNameForType result cached** — Added `_displayNameCache (Dictionary<Type, string>)` to avoid instantiating a module instance via `Activator.CreateInstance` on every popup render frame for the same type.
+
+- **[NIT-1] Removed dead _tabUnderlineTex** — Texture was allocated in `Init()` and freed in `Dispose()` but never assigned to any `GUIStyle`. Removed field declaration, creation, and disposal call.
+
+- **[NIT-3] target null-check in DrawPlayModeContent** — `AnimatedButtonEditor`, `AnimatedToggleEditor`, and `AdvancedProgressBarEditor` all cast `target` to the concrete type at the top of `DrawPlayModeContent`. Added `if (target == null) return` guard to prevent `NullReferenceException` during rapid selection changes or domain reload while play mode is active.
+
 ## [0.3.4] - 2026-05-22
 
 ### Fixed

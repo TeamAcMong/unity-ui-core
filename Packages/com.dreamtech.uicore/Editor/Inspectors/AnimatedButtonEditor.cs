@@ -124,6 +124,7 @@ namespace DreamTech.UICore.Editor.Inspectors
 
         protected override void DrawPlayModeContent()
         {
+            if (target == null) return;
             var btn = (AnimatedButton)target;
 
             EditorGUILayout.BeginHorizontal();

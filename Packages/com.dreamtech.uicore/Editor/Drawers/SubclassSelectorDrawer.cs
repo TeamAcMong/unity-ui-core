@@ -25,7 +25,8 @@ namespace DreamTech.UICore.Editor.Drawers
     [CustomPropertyDrawer(typeof(SubclassSelectorAttribute))]
     public class SubclassSelectorDrawer : PropertyDrawer
     {
-        private static readonly Dictionary<Type, List<Type>> _subclassCache = new Dictionary<Type, List<Type>>();
+        private static readonly Dictionary<Type, List<Type>>   _subclassCache    = new Dictionary<Type, List<Type>>();
+        private static readonly Dictionary<Type, string>        _displayNameCache = new Dictionary<Type, string>();
 
         private const string BuiltInNamespace = "DreamTech.UICore";
 
@@ -108,6 +109,7 @@ namespace DreamTech.UICore.Editor.Drawers
                 baseType,
                 (selectedType) =>
                 {
+                    if (so == null) return;
                     var prop = so.FindProperty(propertyPath);
                     if (prop == null) return;
                     prop.managedReferenceValue = selectedType != null
@@ -129,6 +131,7 @@ namespace DreamTech.UICore.Editor.Drawers
             var menu = new GenericMenu();
             menu.AddItem(new GUIContent("(None)"), property.managedReferenceValue == null, () =>
             {
+                if (so == null) return;
                 var prop = so.FindProperty(propertyPath);
                 if (prop == null) return;
                 prop.managedReferenceValue = null;
@@ -144,6 +147,7 @@ namespace DreamTech.UICore.Editor.Drawers
 
                 menu.AddItem(new GUIContent(displayName), isCurrent, () =>
                 {
+                    if (so == null) return;
                     var prop = so.FindProperty(propertyPath);
                     if (prop == null) return;
                     prop.managedReferenceValue = Activator.CreateInstance(captured);
@@ -228,12 +232,20 @@ namespace DreamTech.UICore.Editor.Drawers
 
         internal static string GetDisplayNameForType(Type type)
         {
+            if (_displayNameCache.TryGetValue(type, out var cached)) return cached;
+
+            string name;
+
             if (typeof(IAnimationModule).IsAssignableFrom(type))
             {
                 try
                 {
                     var inst = (IAnimationModule)Activator.CreateInstance(type);
-                    if (!string.IsNullOrEmpty(inst?.DisplayName)) return inst.DisplayName;
+                    if (!string.IsNullOrEmpty(inst?.DisplayName))
+                    {
+                        _displayNameCache[type] = inst.DisplayName;
+                        return inst.DisplayName;
+                    }
                 }
                 catch { /* ignore */ }
             }
@@ -243,12 +255,18 @@ namespace DreamTech.UICore.Editor.Drawers
                 try
                 {
                     var inst = (IBehaviorModule)Activator.CreateInstance(type);
-                    if (!string.IsNullOrEmpty(inst?.DisplayName)) return inst.DisplayName;
+                    if (!string.IsNullOrEmpty(inst?.DisplayName))
+                    {
+                        _displayNameCache[type] = inst.DisplayName;
+                        return inst.DisplayName;
+                    }
                 }
                 catch { /* ignore */ }
             }
 
-            return FriendlyTypeName(type.Name);
+            name = FriendlyTypeName(type.Name);
+            _displayNameCache[type] = name;
+            return name;
         }
 
         internal static string FriendlyTypeName(string name)
@@ -281,10 +299,12 @@ namespace DreamTech.UICore.Editor.Drawers
         private readonly Type                _baseType;
         private readonly Action<Type>        _onSelected;
 
-        private string        _search        = "";
+        private string        _search           = "";
         private Vector2       _scroll;
-        private int           _keyboardIndex = -1;
-        private List<TypeRow> _visibleRows   = new List<TypeRow>();
+        private int           _keyboardIndex    = -1;  // index into _selectableIndices
+        private List<TypeRow> _visibleRows      = new List<TypeRow>();
+        private List<int>     _selectableIndices = new List<int>();  // visibleRow indices of non-header rows
+        private bool          _focusDone;
 
         private struct TypeRow
         {
@@ -327,9 +347,12 @@ namespace DreamTech.UICore.Editor.Drawers
 
             EditorGUILayout.EndHorizontal();
 
-            // Auto-focus search field on first frame
-            if (Event.current.type == EventType.Repaint)
+            // Auto-focus search field once — guard prevents stealing focus on every Repaint.
+            if (!_focusDone && Event.current.type == EventType.Repaint)
+            {
                 EditorGUI.FocusTextInControl("SubclassSearch");
+                _focusDone = true;
+            }
 
             // ── Keyboard navigation ───────────────────────────────────────────
             HandleKeyboard();
@@ -354,7 +377,9 @@ namespace DreamTech.UICore.Editor.Drawers
                 }
 
                 bool isCurrent  = row.Type == _currentType;
-                bool isSelected = (i == _keyboardIndex);
+                bool isSelected = _keyboardIndex >= 0
+                    && _keyboardIndex < _selectableIndices.Count
+                    && _selectableIndices[_keyboardIndex] == i;
 
                 // Row background
                 Rect rowRect = EditorGUILayout.GetControlRect(false, RowH);
@@ -404,7 +429,8 @@ namespace DreamTech.UICore.Editor.Drawers
 
         public override void OnOpen()
         {
-            _search = "";
+            _search    = "";
+            _focusDone = false;
             RebuildRows();
         }
 
@@ -415,31 +441,24 @@ namespace DreamTech.UICore.Editor.Drawers
             Event e = Event.current;
             if (e.type != EventType.KeyDown) return;
 
-            // Count selectable (non-header) rows
-            int selectableCount = _visibleRows.Count(r => !r.IsHeader);
-            if (selectableCount == 0) return;
+            if (_selectableIndices == null || _selectableIndices.Count == 0) return;
 
             if (e.keyCode == KeyCode.DownArrow)
             {
-                _keyboardIndex = Mathf.Min(_keyboardIndex + 1, _visibleRows.Count - 1);
-                // Skip headers
-                while (_keyboardIndex < _visibleRows.Count - 1 && _visibleRows[_keyboardIndex].IsHeader)
-                    _keyboardIndex++;
+                _keyboardIndex = Mathf.Min(_keyboardIndex + 1, _selectableIndices.Count - 1);
                 e.Use();
             }
             else if (e.keyCode == KeyCode.UpArrow)
             {
+                // Allow navigating to -1 (nothing selected) only from 0; clamp at 0 otherwise.
                 _keyboardIndex = Mathf.Max(_keyboardIndex - 1, 0);
-                while (_keyboardIndex > 0 && _visibleRows[_keyboardIndex].IsHeader)
-                    _keyboardIndex--;
                 e.Use();
             }
             else if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter)
             {
-                if (_keyboardIndex >= 0 && _keyboardIndex < _visibleRows.Count
-                    && !_visibleRows[_keyboardIndex].IsHeader)
+                if (_keyboardIndex >= 0 && _keyboardIndex < _selectableIndices.Count)
                 {
-                    Select(_visibleRows[_keyboardIndex].Type);
+                    Select(_visibleRows[_selectableIndices[_keyboardIndex]].Type);
                     e.Use();
                 }
             }
@@ -459,6 +478,7 @@ namespace DreamTech.UICore.Editor.Drawers
         private void RebuildRows()
         {
             _visibleRows.Clear();
+            _selectableIndices.Clear();
 
             string filter = _search?.Trim() ?? "";
 
@@ -495,6 +515,15 @@ namespace DreamTech.UICore.Editor.Drawers
                 foreach (var t in custom)
                     _visibleRows.Add(MakeRow(t));
             }
+
+            // Build selectable-index lookup (non-header rows only) for keyboard navigation.
+            _selectableIndices.Clear();
+            for (int i = 0; i < _visibleRows.Count; i++)
+                if (!_visibleRows[i].IsHeader) _selectableIndices.Add(i);
+
+            // Clamp keyboard cursor to valid range after filter change.
+            if (_keyboardIndex >= _selectableIndices.Count) _keyboardIndex = _selectableIndices.Count - 1;
+            if (_keyboardIndex < -1) _keyboardIndex = -1;
         }
 
         private TypeRow MakeRow(Type t) => new TypeRow
