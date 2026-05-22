@@ -306,6 +306,13 @@ namespace DreamTech.UICore.Editor.Preview
                 _activeTweens.Clear();
                 Unsubscribe();
             }
+            else
+            {
+                // Defer removal into _pendingRemoval so the Tick loop's IsCancelled branch
+                // skips re-calling RestoreTarget (already done above), preventing double-restore.
+                foreach (var t in _activeTweens)
+                    if (!_pendingRemoval.Contains(t)) _pendingRemoval.Add(t);
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -349,8 +356,13 @@ namespace DreamTech.UICore.Editor.Preview
                 // Handle cancelled (Stop() called externally)
                 if (tween.Handle.IsCancelled)
                 {
-                    RestoreTarget(tween);
-                    _pendingRemoval.Add(tween);
+                    // Skip RestoreTarget if StopAll already restored and added to _pendingRemoval,
+                    // preventing double-restore when StopAll is called mid-Tick.
+                    if (!_pendingRemoval.Contains(tween))
+                    {
+                        RestoreTarget(tween);
+                        _pendingRemoval.Add(tween);
+                    }
                     continue;
                 }
 

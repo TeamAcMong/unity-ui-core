@@ -528,6 +528,7 @@ namespace DreamTech.UICore.ProgressBars
             if (fillImage == null) return;
 
             _flashHandle?.Stop();
+            _flashHandle = null;
 
             var backend = AnimationBackendRegistry.Current;
             float halfDuration = Mathf.Max(0.0001f, flashDuration * 0.5f);
@@ -537,11 +538,15 @@ namespace DreamTech.UICore.ProgressBars
             Color savedColor = _originalFillColor;
 
             // Phase 1: start → flash
-            _flashHandle = backend.TweenColor(this, startColor, flashColor, halfDuration,
+            IAnimationHandle phase1 = backend.TweenColor(this, startColor, flashColor, halfDuration,
                 c => { if (fillImage != null) fillImage.color = c; });
+            _flashHandle = phase1;
 
-            _flashHandle.OnComplete(() =>
+            phase1.OnComplete(() =>
             {
+                // Guard: chỉ start Phase 2 nếu phase1 vẫn là handle đang track.
+                // Nếu Flash() đã được gọi lại, _flashHandle đã bị overwrite — bỏ qua.
+                if (!ReferenceEquals(_flashHandle, phase1)) return;
                 // Phase 2: flash → savedColor. Lưu vào _flashHandle để Stop() ở OnDestroy bao trùm cả phase 2.
                 _flashHandle = backend.TweenColor(this, flashColor, savedColor, halfDuration,
                     c => { if (fillImage != null) fillImage.color = c; });

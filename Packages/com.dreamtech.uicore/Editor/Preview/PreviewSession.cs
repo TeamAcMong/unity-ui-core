@@ -84,6 +84,7 @@ namespace DreamTech.UICore.Editor.Preview
         }
 
         private static SessionState _activeSession;
+        private static bool _monitorSubscribed;
 
         // Cached reflection: PlayAnimationsForState(UIState)
         private static MethodInfo _playAnimationsForStateMethod;
@@ -275,7 +276,11 @@ namespace DreamTech.UICore.Editor.Preview
 
         private static void ScheduleAutoRestore(SessionState session)
         {
-            EditorApplication.update += MonitorTick;
+            if (!_monitorSubscribed)
+            {
+                EditorApplication.update += MonitorTick;
+                _monitorSubscribed = true;
+            }
         }
 
         private static void MonitorTick()
@@ -283,6 +288,7 @@ namespace DreamTech.UICore.Editor.Preview
             if (_activeSession == null)
             {
                 EditorApplication.update -= MonitorTick;
+                _monitorSubscribed = false;
                 return;
             }
 
@@ -291,6 +297,7 @@ namespace DreamTech.UICore.Editor.Preview
             if (elapsed > _activeSession.MaxDuration + 0.15f)
             {
                 EditorApplication.update -= MonitorTick;
+                _monitorSubscribed = false;
                 RestoreAndEnd();
             }
         }
