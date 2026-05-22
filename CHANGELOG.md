@@ -5,6 +5,16 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-05-22
+
+### Added
+- **`targetTransform` field cho ScaleModule, PositionModule, RotationModule** — optional override để animate transform khác thay vì root.
+  - `null` (default): animate `target.transform` của component (behavior cũ, backward compat).
+  - Assigned: animate transform được assign — hữu ích cho pattern "hit area lớn, visual feedback trên child" (button root xử lý click, child shrink khi pressed).
+  - `CaptureInitialValue` đọc giá trị từ transform được resolve, không phải root.
+  - Lambda capture local transform reference với null-check để safe khi GameObject destroy giữa animation.
+- **Use case điển hình:** Migrate từ AnimatorController-based button (state machine → trigger SetTrigger("Pressed") → clip animates child) sang code-based — chỉ cần assign child vào `targetTransform`, set per-state scales, không cần `.controller` asset.
+
 ## [0.4.1] - 2026-05-22
 
 ### Fixed

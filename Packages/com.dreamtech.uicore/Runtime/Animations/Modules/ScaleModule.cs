@@ -55,6 +55,13 @@ namespace DreamTech.UICore.Animations.Modules
         [SerializeField] private Vector3 selectedScaleV = Vector3.one;
 
         // ─────────────────────────────────────────────────────────────────────
+        // Target override
+        // ─────────────────────────────────────────────────────────────────────
+
+        [SerializeField, Tooltip("Optional override — animate transform này thay vì target root. Null = transform của component (root).")]
+        private Transform targetTransform;
+
+        // ─────────────────────────────────────────────────────────────────────
         // State
         // ─────────────────────────────────────────────────────────────────────
 
@@ -66,22 +73,29 @@ namespace DreamTech.UICore.Animations.Modules
         /// <inheritdoc/>
         public override void CaptureInitialValue(MonoBehaviour target)
         {
-            if (target != null)
-                _initialScale = target.transform.localScale;
+            var t = ResolveTargetTransform(target);
+            if (t != null)
+                _initialScale = t.localScale;
         }
 
         /// <inheritdoc/>
         public override IAnimationHandle Play(MonoBehaviour target, UIState newState, IAnimationBackend backend)
         {
             if (!enabled || target == null) return null;
+            var t = ResolveTargetTransform(target);
+            if (t == null) return null;
 
-            Vector3 from = target.transform.localScale;
+            Vector3 from = t.localScale;
             Vector3 to = GetTargetScale(newState);
-            Transform t = target.transform;
 
             return backend.TweenVector3(target, from, to, duration,
                 v => { if (t != null) t.localScale = v; },
                 curve);
+        }
+
+        private Transform ResolveTargetTransform(MonoBehaviour target)
+        {
+            return targetTransform != null ? targetTransform : (target != null ? target.transform : null);
         }
 
         // ─────────────────────────────────────────────────────────────────────

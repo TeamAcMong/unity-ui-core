@@ -33,6 +33,9 @@ namespace DreamTech.UICore.Animations.Modules
         [Tooltip("Local Euler angles for Selected state.")]
         [SerializeField] private Vector3 selectedRotation = Vector3.zero;
 
+        [SerializeField, Tooltip("Optional override — animate transform này thay vì target root. Null = transform của component (root).")]
+        private Transform targetTransform;
+
         private Vector3 _initialEuler;
 
         /// <inheritdoc/>
@@ -41,22 +44,29 @@ namespace DreamTech.UICore.Animations.Modules
         /// <inheritdoc/>
         public override void CaptureInitialValue(MonoBehaviour target)
         {
-            if (target != null)
-                _initialEuler = target.transform.localEulerAngles;
+            var t = ResolveTargetTransform(target);
+            if (t != null)
+                _initialEuler = t.localEulerAngles;
         }
 
         /// <inheritdoc/>
         public override IAnimationHandle Play(MonoBehaviour target, UIState newState, IAnimationBackend backend)
         {
             if (!enabled || target == null) return null;
+            var t = ResolveTargetTransform(target);
+            if (t == null) return null;
 
-            Vector3 from = target.transform.localEulerAngles;
+            Vector3 from = t.localEulerAngles;
             Vector3 to = GetTargetEuler(newState);
-            Transform t = target.transform;
 
             return backend.TweenVector3(target, from, to, duration,
                 v => { if (t != null) t.localEulerAngles = v; },
                 curve);
+        }
+
+        private Transform ResolveTargetTransform(MonoBehaviour target)
+        {
+            return targetTransform != null ? targetTransform : (target != null ? target.transform : null);
         }
 
         private Vector3 GetTargetEuler(UIState state) => state switch

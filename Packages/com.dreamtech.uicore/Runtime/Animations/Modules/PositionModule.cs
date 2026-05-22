@@ -31,6 +31,9 @@ namespace DreamTech.UICore.Animations.Modules
         [Tooltip("Local-position offset from initial position for Selected state.")]
         [SerializeField] private Vector3 selectedOffset = Vector3.zero;
 
+        [SerializeField, Tooltip("Optional override — animate transform này thay vì target root. Null = transform của component (root).")]
+        private Transform targetTransform;
+
         private Vector3 _initialPosition;
 
         /// <inheritdoc/>
@@ -39,22 +42,29 @@ namespace DreamTech.UICore.Animations.Modules
         /// <inheritdoc/>
         public override void CaptureInitialValue(MonoBehaviour target)
         {
-            if (target != null)
-                _initialPosition = target.transform.localPosition;
+            var t = ResolveTargetTransform(target);
+            if (t != null)
+                _initialPosition = t.localPosition;
         }
 
         /// <inheritdoc/>
         public override IAnimationHandle Play(MonoBehaviour target, UIState newState, IAnimationBackend backend)
         {
             if (!enabled || target == null) return null;
+            var t = ResolveTargetTransform(target);
+            if (t == null) return null;
 
-            Vector3 from = target.transform.localPosition;
+            Vector3 from = t.localPosition;
             Vector3 to = _initialPosition + GetOffset(newState);
-            Transform t = target.transform;
 
             return backend.TweenVector3(target, from, to, duration,
                 v => { if (t != null) t.localPosition = v; },
                 curve);
+        }
+
+        private Transform ResolveTargetTransform(MonoBehaviour target)
+        {
+            return targetTransform != null ? targetTransform : (target != null ? target.transform : null);
         }
 
         private Vector3 GetOffset(UIState state) => state switch
