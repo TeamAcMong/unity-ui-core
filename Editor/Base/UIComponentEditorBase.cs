@@ -103,8 +103,7 @@ namespace DreamTech.UICore.Editor.Base
         /// </summary>
         protected void DrawHeroHeader(string title, string subtitle = null, GUIContent icon = null)
         {
-            Rect headerRect = EditorGUILayout.BeginVertical();
-            EditorGUI.DrawRect(headerRect, UIEditorStyles.HeaderBg);
+            EditorGUILayout.BeginVertical();
 
             EditorGUILayout.Space(6f);
             EditorGUILayout.BeginHorizontal();
@@ -127,9 +126,14 @@ namespace DreamTech.UICore.Editor.Base
             EditorGUILayout.Space(6f);
             EditorGUILayout.EndVertical();
 
-            // 2px accent line below the hero band
-            Rect accentRect = GUILayoutUtility.GetLastRect();
-            EditorGUI.DrawRect(new Rect(accentRect.x, accentRect.yMax - 2f, accentRect.width, 2f), UIEditorStyles.Accent);
+            // Draw background + 2px accent line during Repaint using GetLastRect() so height is known.
+            if (Event.current.type == EventType.Repaint)
+            {
+                Rect bandRect = GUILayoutUtility.GetLastRect();
+                EditorGUI.DrawRect(bandRect, UIEditorStyles.HeaderBg);
+                EditorGUI.DrawRect(new Rect(bandRect.x, bandRect.yMax - 2f, bandRect.width, 2f),
+                    UIEditorStyles.Accent);
+            }
             EditorGUILayout.Space(2f);
         }
 
@@ -151,27 +155,56 @@ namespace DreamTech.UICore.Editor.Base
         {
             EditorGUILayout.BeginVertical(UIEditorStyles.CardBackground);
 
-            // Header row
-            EditorGUILayout.BeginHorizontal();
+            // Allocate the full header row as one rect so the whole row is clickable.
+            Rect headerRow = EditorGUILayout.GetControlRect(false, 20f);
 
-            if (collapsible)
+            // Hover tint (communicates clickability)
+            if (collapsible && headerRow.Contains(Event.current.mousePosition)
+                && Event.current.type == EventType.Repaint)
             {
-                GUIContent arrow = foldout ? UIEditorStyles.IconUnfold : UIEditorStyles.IconFold;
-                if (GUILayout.Button(arrow, GUIStyle.none, GUILayout.Width(16f), GUILayout.Height(16f)))
-                    foldout = !foldout;
+                EditorGUI.DrawRect(headerRow,
+                    new Color(1f, 1f, 1f, EditorGUIUtility.isProSkin ? 0.03f : 0.04f));
             }
 
-            if (icon != null && icon.image != null)
-                GUILayout.Label(icon, GUILayout.Width(16f), GUILayout.Height(16f));
+            float x = headerRow.x + 4f;
 
-            EditorGUILayout.LabelField(title, UIEditorStyles.SectionHeader);
-            EditorGUILayout.EndHorizontal();
+            // Arrow indicator (decorative, not a separate button)
+            if (collapsible)
+            {
+                Rect arrowRect = new Rect(x, headerRow.y + 2f, 14f, 14f);
+                GUI.Label(arrowRect, foldout ? UIEditorStyles.IconUnfold : UIEditorStyles.IconFold,
+                    EditorStyles.boldLabel);
+                x += 18f;
+            }
 
-            // Thin accent separator under the section header
-            Rect headerRowRect = GUILayoutUtility.GetLastRect();
-            EditorGUI.DrawRect(
-                new Rect(headerRowRect.x, headerRowRect.yMax + 2f, headerRowRect.width, 1f),
-                new Color(UIEditorStyles.Accent.r, UIEditorStyles.Accent.g, UIEditorStyles.Accent.b, 0.25f));
+            // Optional icon
+            if (icon?.image != null)
+            {
+                Rect iconRect = new Rect(x, headerRow.y + 2f, 16f, 16f);
+                GUI.DrawTexture(iconRect, icon.image, ScaleMode.ScaleToFit);
+                x += 20f;
+            }
+
+            // Title label
+            Rect titleRect = new Rect(x, headerRow.y, headerRow.xMax - x, headerRow.height);
+            EditorGUI.LabelField(titleRect, title, UIEditorStyles.SectionHeader);
+
+            // Whole-row click toggles foldout
+            if (collapsible && Event.current.type == EventType.MouseDown
+                && Event.current.button == 0 && headerRow.Contains(Event.current.mousePosition))
+            {
+                foldout = !foldout;
+                Event.current.Use();
+            }
+
+            // Thin accent separator (only when expanded, only during Repaint)
+            if (foldout && Event.current.type == EventType.Repaint)
+            {
+                EditorGUI.DrawRect(
+                    new Rect(headerRow.x, headerRow.yMax, headerRow.width, 1f),
+                    new Color(UIEditorStyles.Accent.r, UIEditorStyles.Accent.g, UIEditorStyles.Accent.b, 0.4f));
+            }
+
             EditorGUILayout.Space(4f);
 
             if (!collapsible) foldout = true;
@@ -238,15 +271,12 @@ namespace DreamTech.UICore.Editor.Base
                     break;
             }
 
-            Rect cardRect = EditorGUILayout.BeginVertical();
-
-            // Draw tinted background
-            EditorGUI.DrawRect(cardRect, bgColor);
+            EditorGUILayout.BeginVertical();
 
             EditorGUILayout.BeginHorizontal();
 
-            // 3px left border drawn after BeginHorizontal so we have the final rect
-            EditorGUILayout.Space(8f); // reserve space for border + gap
+            // Reserve space for 3px left border + gap
+            EditorGUILayout.Space(8f);
 
             EditorGUILayout.BeginVertical();
             EditorGUILayout.Space(4f);
@@ -255,12 +285,8 @@ namespace DreamTech.UICore.Editor.Base
             GUILayout.Label(icon, GUILayout.Width(16f), GUILayout.Height(16f));
             EditorGUILayout.Space(4f);
 
-            var msgStyle = new GUIStyle(EditorStyles.wordWrappedMiniLabel)
-            {
-                fontSize = 11,
-                wordWrap = true,
-            };
-            GUILayout.Label(message, msgStyle);
+            // Use cached style — avoids per-frame GUIStyle allocation.
+            GUILayout.Label(message, UIEditorStyles.HelpCardMessage);
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.Space(4f);
@@ -269,9 +295,13 @@ namespace DreamTech.UICore.Editor.Base
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.EndVertical();
 
-            // Draw 3px left border over the card
-            Rect borderRect = new Rect(cardRect.x, cardRect.y, 3f, cardRect.height);
-            EditorGUI.DrawRect(borderRect, borderColor);
+            // Draw background + 3px left border during Repaint so height is fully known.
+            if (Event.current.type == EventType.Repaint)
+            {
+                Rect cardRect  = GUILayoutUtility.GetLastRect();
+                EditorGUI.DrawRect(cardRect, bgColor);
+                EditorGUI.DrawRect(new Rect(cardRect.x, cardRect.y, 3f, cardRect.height), borderColor);
+            }
 
             EditorGUILayout.Space(4f);
         }
@@ -339,13 +369,7 @@ namespace DreamTech.UICore.Editor.Base
         {
             EditorGUILayout.Space(2f);
 
-            Rect panelRect = EditorGUILayout.BeginVertical();
-
-            bool isPro = EditorGUIUtility.isProSkin;
-            Color panelBg = isPro
-                ? new Color(0.18f, 0.15f, 0.30f, 1f)
-                : new Color(0.88f, 0.85f, 0.96f, 1f);
-            EditorGUI.DrawRect(panelRect, panelBg);
+            EditorGUILayout.BeginVertical();
 
             EditorGUILayout.Space(6f);
 
@@ -376,6 +400,18 @@ namespace DreamTech.UICore.Editor.Base
 
             EditorGUILayout.Space(6f);
             EditorGUILayout.EndVertical();
+
+            // Draw background during Repaint so height is fully known.
+            if (Event.current.type == EventType.Repaint)
+            {
+                Rect panelRect = GUILayoutUtility.GetLastRect();
+                bool isPro = EditorGUIUtility.isProSkin;
+                Color panelBg = isPro
+                    ? new Color(0.18f, 0.15f, 0.30f, 1f)
+                    : new Color(0.88f, 0.85f, 0.96f, 1f);
+                EditorGUI.DrawRect(panelRect, panelBg);
+            }
+
             EditorGUILayout.Space(4f);
         }
 
@@ -384,11 +420,16 @@ namespace DreamTech.UICore.Editor.Base
         /// </summary>
         protected void DrawPill(string label, Color color)
         {
-            var style = new GUIStyle(UIEditorStyles.Pill)
-            {
-                normal = { background = UIEditorStyles.MakeTex(2, 2, new Color(color.r, color.g, color.b, 0.25f)) },
-            };
-            GUILayout.Label(label, style, GUILayout.ExpandWidth(false));
+            // Use EditorGUI.DrawRect for the pill background instead of MakeTex — avoids
+            // allocating a new Texture2D per frame (texture leak on every OnInspectorGUI call).
+            var content = new GUIContent(label);
+            Vector2 size = UIEditorStyles.Pill.CalcSize(content);
+            Rect rect = GUILayoutUtility.GetRect(size.x + 8f, 16f, GUILayout.ExpandWidth(false));
+
+            if (Event.current.type == EventType.Repaint)
+                EditorGUI.DrawRect(rect, new Color(color.r, color.g, color.b, 0.25f));
+
+            GUI.Label(rect, label, UIEditorStyles.Pill);
         }
 
         /// <summary>22×22 icon button. Returns true when clicked.</summary>

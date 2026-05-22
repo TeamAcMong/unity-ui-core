@@ -11,6 +11,7 @@ namespace DreamTech.UICore.Editor.Styles
     public static class UIEditorStyles
     {
         private static bool _initialized;
+        private static bool _lastKnownIsProSkin;
 
         // ── Cached textures ────────────────────────────────────────────────────
         private static Texture2D _tabActiveBg;
@@ -29,7 +30,7 @@ namespace DreamTech.UICore.Editor.Styles
         private static Texture2D _helpSuccessBgTex;
         private static Texture2D _helpWarningBgTex;
         private static Texture2D _helpDangerBgTex;
-        private static Texture2D _tabUnderlineTex;
+        // _tabUnderlineTex removed — was allocated but never bound to any GUIStyle (dead texture).
 
         // ── Cached styles ──────────────────────────────────────────────────────
         private static GUIStyle _headerStyle;
@@ -47,6 +48,7 @@ namespace DreamTech.UICore.Editor.Styles
         private static GUIStyle _emptyStateLabelStyle;
         private static GUIStyle _playModeHeaderStyle;
         private static GUIStyle _moduleCardHeaderStyle;
+        private static GUIStyle _helpCardMessage;
 
         // ── Color Palette (theme-aware) ────────────────────────────────────────
 
@@ -84,9 +86,9 @@ namespace DreamTech.UICore.Editor.Styles
                 ? new Color(0.7f, 0.7f, 0.7f)
                 : new Color(0.4f, 0.4f, 0.4f);
 
-        // Legacy alias kept for backward compat
-        public static readonly Color AccentColor  = new Color(0.40f, 0.70f, 1.00f);
-        public static readonly Color ErrorColor   = new Color(1.00f, 0.40f, 0.40f);
+        // Legacy aliases — delegate to theme-aware properties so they update on skin change.
+        public static Color AccentColor => Accent;
+        public static Color ErrorColor  => DangerColor;
 
         // ── Public style accessors (lazy init) ────────────────────────────────
 
@@ -105,6 +107,7 @@ namespace DreamTech.UICore.Editor.Styles
         public static GUIStyle EmptyStateLabel { get { Init(); return _emptyStateLabelStyle;  } }
         public static GUIStyle PlayModeHeader  { get { Init(); return _playModeHeaderStyle;   } }
         public static GUIStyle ModuleCardHeader{ get { Init(); return _moduleCardHeaderStyle; } }
+        public static GUIStyle HelpCardMessage { get { Init(); return _helpCardMessage;       } }
 
         // ── Built-in icon helpers ──────────────────────────────────────────────
 
@@ -126,9 +129,13 @@ namespace DreamTech.UICore.Editor.Styles
 
         private static void Init()
         {
-            if (_initialized) return;
-
             bool isPro = EditorGUIUtility.isProSkin;
+            if (_initialized && _lastKnownIsProSkin == isPro) return;
+
+            // Skin changed (Dark ↔ Light) — discard all cached styles/textures and reinit.
+            if (_initialized) Dispose();
+
+            _lastKnownIsProSkin = isPro;
 
             // ── Textures ─────────────────────────────────────────────────────
             _tabActiveBg       = MakeTex(2, 2, new Color(0.26f, 0.59f, 0.98f, 0.85f));
@@ -147,7 +154,6 @@ namespace DreamTech.UICore.Editor.Styles
             _helpSuccessBgTex  = MakeTex(2, 2, isPro ? new Color(0.15f, 0.35f, 0.20f, 0.35f) : new Color(0.85f, 1.00f, 0.88f, 0.50f));
             _helpWarningBgTex  = MakeTex(2, 2, isPro ? new Color(0.40f, 0.30f, 0.10f, 0.40f) : new Color(1.00f, 0.95f, 0.80f, 0.50f));
             _helpDangerBgTex   = MakeTex(2, 2, isPro ? new Color(0.45f, 0.15f, 0.15f, 0.40f) : new Color(1.00f, 0.88f, 0.88f, 0.50f));
-            _tabUnderlineTex   = MakeTex(2, 2, new Color(0.26f, 0.59f, 0.98f, 1f));
 
             // ── Legacy header ────────────────────────────────────────────────
             _headerStyle = new GUIStyle(EditorStyles.boldLabel)
@@ -287,6 +293,13 @@ namespace DreamTech.UICore.Editor.Styles
                 normal    = { background = _playModeBgTex, textColor = isPro ? new Color(0.85f, 0.80f, 1.00f) : new Color(0.25f, 0.15f, 0.50f) },
             };
 
+            // ── Help card message label ───────────────────────────────────────
+            _helpCardMessage = new GUIStyle(EditorStyles.wordWrappedMiniLabel)
+            {
+                fontSize = 11,
+                wordWrap = true,
+            };
+
             // Register disposal on domain reload
             AssemblyReloadEvents.beforeAssemblyReload -= Dispose;
             AssemblyReloadEvents.beforeAssemblyReload += Dispose;
@@ -330,7 +343,6 @@ namespace DreamTech.UICore.Editor.Styles
             DestroyTex(ref _helpSuccessBgTex);
             DestroyTex(ref _helpWarningBgTex);
             DestroyTex(ref _helpDangerBgTex);
-            DestroyTex(ref _tabUnderlineTex);
             _initialized = false;
         }
 

@@ -123,6 +123,7 @@ namespace DreamTech.UICore.Editor.Inspectors
 
         protected override void DrawPlayModeContent()
         {
+            if (target == null) return;
             var tg = (AnimatedToggle)target;
 
             EditorGUILayout.BeginHorizontal();
