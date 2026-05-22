@@ -5,6 +5,14 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-05-22
+
+### Fixed
+- **`ArgumentOutOfRangeException` in `PreviewAnimationBackend.Tick`** — when a tween's `OnCompleteCallback` triggered `PreviewSession.RestoreAndEnd` → `PreviewBackend.StopAll` → `_activeTweens.Clear()`, the Tick loop's subsequent `RemoveAt(i)` crashed because the list was empty/shorter. Fix: re-entrancy guard `_isTicking` + defer mutations via `_pendingRemoval` list. `StopAll` skips the `Clear()` when called mid-Tick — cancellation markers and target restore still happen synchronously; list mutation deferred to end of Tick. Removal by reference, not by index, so out-of-range can't occur.
+
+### Changed
+- **Preview now runs at high cadence (not throttled by `EditorApplication.update` idle rate)** — Tick now calls `EditorApplication.QueuePlayerLoopUpdate()` to drive a full player-loop tick each frame, plus `SceneView.RepaintAll`, `InternalEditorUtility.RepaintAllViews`, and a direct `focusedWindow.Repaint()` nudge. Net effect: preview now plays at ~30-60 Hz instead of the editor's idle ~10 Hz, matching what designers expect from "Play preview" UX.
+
 ## [0.6.0] - 2026-05-22
 
 ### Added
