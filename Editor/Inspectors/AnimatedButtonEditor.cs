@@ -1,5 +1,9 @@
+using DreamTech.UICore.Animations.Modules;
+using DreamTech.UICore.Behaviors;
 using DreamTech.UICore.Buttons;
 using DreamTech.UICore.Editor.Base;
+using DreamTech.UICore.Editor.Drawers;
+using DreamTech.UICore.Editor.Styles;
 using UnityEditor;
 using UnityEngine;
 
@@ -8,7 +12,17 @@ namespace DreamTech.UICore.Editor.Inspectors
     [CustomEditor(typeof(AnimatedButton))]
     public class AnimatedButtonEditor : UIComponentEditorBase
     {
-        protected override string[] TabNames => new[] { "Settings", "Animation", "Behaviors", "Audio", "Events" };
+        protected override string[] TabNames => new[] { "Settings", "Animation", "Behaviors", "Events" };
+
+        protected override string HeaderTitle    => "Animated Button";
+        protected override string HeaderSubtitle => "Interactive button with modular animations & behaviors";
+        protected override GUIContent HeaderIcon => UIEditorStyles.IconPlay;
+
+        // ── Foldout states ─────────────────────────────────────────────────────
+        private bool _foldInteraction = true;
+        private bool _foldAudio       = true;
+        private bool _foldAnimEvents  = true;
+        private bool _foldEvents      = true;
 
         protected override void DrawTabContent(int tabIndex)
         {
@@ -17,55 +31,110 @@ namespace DreamTech.UICore.Editor.Inspectors
                 case 0: DrawSettingsTab();    break;
                 case 1: DrawAnimationTab();   break;
                 case 2: DrawBehaviorsTab();   break;
-                case 3: DrawAudioTab();       break;
-                case 4: DrawEventsTab();      break;
+                case 3: DrawEventsTab();      break;
             }
         }
 
+        // ── Settings tab: Interaction + Audio ──────────────────────────────────
+
         private void DrawSettingsTab()
         {
-            DrawProperty("interactable");
-            DrawProperty("clickCooldown");
+            // Interaction Settings card
+            if (DrawSectionCard("Interaction Settings", ref _foldInteraction, UIEditorStyles.IconSettings))
+            {
+                DrawProperty("interactable");
+                DrawProperty("clickCooldown");
+            }
+            EndSectionCard();
+
+            // Audio Settings card
+            if (DrawSectionCard("Audio Settings", ref _foldAudio))
+            {
+                DrawProperty("audioSource");
+                DrawProperty("hoverSound");
+                DrawProperty("clickSound");
+            }
+            EndSectionCard();
         }
+
+        // ── Animation tab: ModuleListDrawer + AnimationEventHooks ──────────────
 
         private void DrawAnimationTab()
         {
-            DrawProperty("animationModules", "Animation Modules");
-            EditorGUILayout.HelpBox(
-                "Add animation modules via the dropdown to customize button behavior per state.\n" +
-                "Any [Serializable] class implementing IAnimationModule with a public no-arg " +
-                "constructor will appear here automatically — no registration required.",
-                MessageType.Info);
+            SerializedProperty animModulesProp = serializedObject.FindProperty("animationModules");
+            if (animModulesProp != null)
+            {
+                ModuleListDrawer.Draw(
+                    animModulesProp,
+                    typeof(IAnimationModule),
+                    UIEditorStyles.AnimationModuleColor,
+                    UIEditorStyles.IconAnimation,
+                    "Add Animation Module");
+            }
+
             EditorGUILayout.Space(4f);
-            DrawProperty("animationEvents", "Animation Event Hooks");
+            DrawHelpCard(
+                "Add modules to customize button animations per state.\n" +
+                "Any [Serializable] class implementing IAnimationModule auto-appears — no registration needed.",
+                HelpType.Info);
+
+            EditorGUILayout.Space(8f);
+
+            if (DrawSectionCard("Animation Event Hooks", ref _foldAnimEvents))
+            {
+                DrawProperty("animationEvents");
+            }
+            EndSectionCard();
         }
+
+        // ── Behaviors tab: ModuleListDrawer ────────────────────────────────────
 
         private void DrawBehaviorsTab()
         {
-            DrawProperty("behaviorModules", "Behavior Modules");
-            EditorGUILayout.HelpBox(
-                "Add behaviors (Cooldown, LongPress, MultiClick, HoldRepeat) qua dropdown.\n" +
-                "Custom behaviors: implement IBehaviorModule + [Serializable] → auto xuất hiện.",
-                MessageType.Info);
+            SerializedProperty behaviorsProp = serializedObject.FindProperty("behaviorModules");
+            if (behaviorsProp != null)
+            {
+                ModuleListDrawer.Draw(
+                    behaviorsProp,
+                    typeof(IBehaviorModule),
+                    UIEditorStyles.BehaviorModuleColor,
+                    UIEditorStyles.IconBehavior,
+                    "Add Behavior");
+            }
+
+            EditorGUILayout.Space(4f);
+            DrawHelpCard(
+                "Add behaviors (Cooldown, LongPress, MultiClick, HoldRepeat) via the + button.\n" +
+                "Custom behaviors: implement IBehaviorModule + [Serializable] → auto-detected.",
+                HelpType.Info);
         }
 
-        private void DrawAudioTab()
-        {
-            DrawProperty("audioSource");
-            DrawProperty("hoverSound");
-            DrawProperty("clickSound");
-        }
+        // ── Events tab ─────────────────────────────────────────────────────────
 
         private void DrawEventsTab()
         {
-            DrawProperty("onClick");
+            if (DrawSectionCard("Unity Events", ref _foldEvents))
+            {
+                DrawProperty("onClick");
+            }
+            EndSectionCard();
         }
+
+        // ── Play mode ─────────────────────────────────────────────────────────
 
         protected override void DrawPlayModeContent()
         {
             var btn = (AnimatedButton)target;
-            EditorGUILayout.LabelField($"Current State: {btn.CurrentState}",   EditorStyles.miniLabel);
-            EditorGUILayout.LabelField($"Interactable:  {btn.IsInteractable}", EditorStyles.miniLabel);
+
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("State:", GUILayout.Width(40f));
+            DrawPill(btn.CurrentState.ToString(), UIEditorStyles.AnimationModuleColor);
+            EditorGUILayout.Space(8f);
+            EditorGUILayout.LabelField("Interactable:", GUILayout.Width(80f));
+            DrawPill(btn.IsInteractable ? "Yes" : "No",
+                btn.IsInteractable ? UIEditorStyles.SuccessColor : UIEditorStyles.DangerColor);
+            EditorGUILayout.EndHorizontal();
+
             EditorGUILayout.Space(4f);
 
             EditorGUILayout.BeginHorizontal();
