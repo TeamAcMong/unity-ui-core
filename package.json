@@ -1,6 +1,6 @@
 {
   "name": "com.dreamtech.uicore",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "displayName": "DreamTech UI Core",
   "description": "Modular UI framework with UniTask backend. Plug-in animation & behavior modules via Inspector. Polished card-based editor with accordion module list, searchable subclass dropdown, theme-aware styles. Includes AnimatedButton, AnimatedToggle, AdvancedProgressBar.",
   "unity": "2022.3",
