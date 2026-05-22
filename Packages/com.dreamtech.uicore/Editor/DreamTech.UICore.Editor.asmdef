@@ -1,0 +1,14 @@
+{
+    "name": "DreamTech.UICore.Editor",
+    "rootNamespace": "DreamTech.UICore.Editor",
+    "references": [
+        "DreamTech.UICore",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "noEngineReferences": false
+}
