@@ -5,6 +5,16 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-05-22
+
+### Fixed
+- **`ObjectDisposedException` on pointer hover/exit** — `UniTaskAnimationHandle.Stop()` called `_cts.Cancel()` on a `CancellationTokenSource` that had already been disposed by `MarkCompleted()` (natural completion path). When `StopActiveAnimations` iterated `_activeHandles` containing already-completed handles and called `Stop()` on each, the disposed CTS threw. Fix:
+  - `Stop()` is now idempotent: early-returns if `_completed`, wraps `Cancel()` in try/catch for `ObjectDisposedException` defensively.
+  - `UIAnimatedComponent.PlayAnimationsForState` now removes handles from `_activeHandles` in their `OnComplete` callback (captured local var to avoid loop-variable closure bug). Naturally-completed handles never sit stale in the list.
+
+### Changed
+- **Preview FPS — high-cadence delayCall chain (~60 Hz)** — `EditorApplication.update` is throttled to ~10 Hz when the editor is idle, causing visibly choppy preview even with `QueuePlayerLoopUpdate`. Tick now schedules the next iteration via `EditorApplication.delayCall` (fires next editor frame, ~60 Hz with dedup via `_delayCallScheduled` flag) when there are active tweens. Combined with explicit per-`SceneView` repaint (some setups have multiple open scene views that `RepaintAll` doesn't catch reliably), preview now runs smoothly.
+
 ## [0.6.1] - 2026-05-22
 
 ### Fixed
