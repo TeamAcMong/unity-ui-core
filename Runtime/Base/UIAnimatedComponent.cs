@@ -107,12 +107,18 @@ namespace DreamTech.UICore.Base
             }
 
             // Pass 2: register OnComplete với totalCount đã biết chính xác.
+            // Capture handle in local var so the closure removes the right one (not the loop var).
             int completedCount = 0;
             foreach (var handle in newHandles)
             {
-                handle.OnComplete(() =>
+                var capturedHandle = handle;
+                capturedHandle.OnComplete(() =>
                 {
                     completedCount++;
+                    // Remove completed handle from _activeHandles so future StopActiveAnimations
+                    // doesn't call Stop() on a handle whose CancellationTokenSource is already
+                    // disposed (UniTask backend disposes CTS in MarkCompleted).
+                    _activeHandles.Remove(capturedHandle);
                     if (completedCount >= totalCount)
                         animationEvents.InvokeComplete();
                 });

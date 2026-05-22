@@ -28,8 +28,19 @@ namespace DreamTech.UICore.Animations.Backends
 
             public void Stop()
             {
-                if (!_cts.IsCancellationRequested)
-                    _cts.Cancel();
+                // Idempotent: handle naturally completed (CTS disposed in MarkCompleted)
+                // or already cancelled — both no-op safely.
+                if (_completed) return;
+                try
+                {
+                    if (!_cts.IsCancellationRequested)
+                        _cts.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // CTS disposed between MarkCompleted and our IsCancellationRequested check
+                    // (race only possible if MarkCompleted runs across thread). Safe to ignore.
+                }
             }
 
             public IAnimationHandle OnComplete(Action callback)

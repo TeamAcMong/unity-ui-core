@@ -85,6 +85,10 @@ namespace DreamTech.UICore.Editor.Preview
         // and we use _pendingRemoval to safely remove finished/cancelled tweens after the loop.
         private bool _isTicking;
         private readonly List<PreviewTween> _pendingRemoval = new List<PreviewTween>();
+        // High-cadence chain: delayCall fires once per editor frame (~60 Hz when active),
+        // much faster than EditorApplication.update's idle throttle (~10 Hz).
+        // _delayCallScheduled prevents stacking multiple subscriptions.
+        private bool _delayCallScheduled;
 
         // ─────────────────────────────────────────────────────────────────────
         // IAnimationBackend — TweenFloat
@@ -409,17 +413,41 @@ namespace DreamTech.UICore.Editor.Preview
             }
 
             // Force editor repaint at high cadence so preview looks smooth (not throttled
-            // to EditorApplication.update's idle rate of ~10 Hz). QueuePlayerLoopUpdate
-            // triggers a full player-loop tick in edit mode, driving Unity's repaint pipeline.
+            // to EditorApplication.update's idle rate of ~10 Hz).
             EditorApplication.QueuePlayerLoopUpdate();
-            SceneView.RepaintAll();
             UnityEditorInternal.InternalEditorUtility.RepaintAllViews();
-            // Also nudge any focused InspectorWindow which doesn't always pick up RepaintAllViews
+            // Explicit per-SceneView repaint (RepaintAll alone may not catch all open scene views)
+            foreach (SceneView sv in SceneView.sceneViews)
+                if (sv != null) sv.Repaint();
+            // Nudge focused window for inspector responsiveness
             var focused = EditorWindow.focusedWindow;
             if (focused != null) focused.Repaint();
 
-            if (_activeTweens.Count == 0)
+            // High-cadence chain: schedule next Tick on next editor frame (~60 Hz) instead
+            // of waiting for EditorApplication.update idle throttle. Deduplicated via flag.
+            if (_activeTweens.Count > 0)
+            {
+                ScheduleNextHighCadenceTick();
+            }
+            else
+            {
                 Unsubscribe();
+            }
+        }
+
+        private void ScheduleNextHighCadenceTick()
+        {
+            if (_delayCallScheduled) return;
+            _delayCallScheduled = true;
+            EditorApplication.delayCall += DelayCallTick;
+        }
+
+        private void DelayCallTick()
+        {
+            _delayCallScheduled = false;
+            if (_activeTweens.Count == 0) return;
+            // Invoke the same Tick body — delayCall is one-shot so we explicitly re-schedule at end.
+            Tick();
         }
 
         // ─────────────────────────────────────────────────────────────────────
