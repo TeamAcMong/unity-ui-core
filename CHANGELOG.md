@@ -5,6 +5,51 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-05-22
+
+### Added — Editor Polish
+
+**Visual overhaul** — production-grade IMGUI inspector:
+
+- **Hero header** — large title + subtitle + accent line, theme-aware (Dark/Light).
+- **Card-based sections** — collapsible cards with subtle backgrounds, accent separators, replacing flat HelpBoxes.
+- **Underline tab indicator** — Material-style 2px accent line under active tab (was: toolbar buttons).
+- **Theme-aware color palette** — 8 semantic colors (Accent, Card BG, Animation Blue, Behavior Orange, Success/Warning/Danger, Muted Text). `EditorGUIUtility.isProSkin` aware.
+- **Built-in icon helpers** — 13 icons via `EditorGUIUtility.IconContent` (Add/Remove/Duplicate/Settings/Play/Help/Animation/Behavior/etc).
+
+**ModuleListDrawer** (new) — accordion card list for `[SerializeReference] List<IModule>`:
+- 3px accent bar per card (blue = animation, orange = behavior).
+- Drag-handle + enabled checkbox + DisplayName + type pill + foldout arrow + ⋮ context menu.
+- Drag-to-reorder via `ReorderableList`.
+- Context menu: Move Up/Down, Duplicate, Remove.
+- Add button → grouped `GenericMenu` with `Built-in/` and `Custom/` submenus.
+- Empty state with call-to-action button.
+- Expanded state persisted per property path.
+
+**SubclassSelectorDrawer** improvements:
+- Replaced `GenericMenu` with `PopupWindowContent` (320×360 popup).
+- Auto-focus search field, real-time filter on display name + type name.
+- Grouped sections: Built-in (DreamTech.UICore.*) vs Custom (user types).
+- Keyboard navigation: Up/Down/Enter/Esc.
+- Checkmark on current type.
+
+**UIComponentEditorBase** layout primitives (new methods):
+- `DrawHeroHeader(title, subtitle, icon)` — top-of-inspector banner.
+- `DrawSectionCard(title, ref foldout, icon, collapsible)` — wrap content in styled card.
+- `DrawHelpCard(message, HelpType)` — modernized HelpBox with colored left border.
+- `DrawEmptyState(message, actionLabel, onAction)` — empty list CTA.
+- `DrawPlayModePanel(drawTests)` — distinctive purple-tinted test panel.
+- `DrawPill(label, color)`, `DrawDivider()`, `IconButton(icon, tooltip)`.
+
+**Per-component editors refactored:**
+- AnimatedButtonEditor, AnimatedToggleEditor, AdvancedProgressBarEditor now use new helpers.
+- AdvancedProgressBar gains 25%/50%/75%/100% play-mode test buttons.
+
+### Performance
+- All textures cached with `HideFlags.HideAndDontSave`.
+- `AssemblyReloadEvents.beforeAssemblyReload` cleanup on domain reload.
+- Module list expanded-state stored in static dictionary (no per-frame allocation).
+
 ## [0.2.0] - 2026-05-22
 
 ### Added
