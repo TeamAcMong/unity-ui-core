@@ -81,6 +81,10 @@ namespace DreamTech.UICore.Editor.Preview
         private readonly List<PreviewTween> _activeTweens = new List<PreviewTween>();
         private bool _updateSubscribed;
         private double _lastTickTime;
+        // Re-entrancy guard: when true, Tick is mid-iteration. StopAll defers mutation
+        // and we use _pendingRemoval to safely remove finished/cancelled tweens after the loop.
+        private bool _isTicking;
+        private readonly List<PreviewTween> _pendingRemoval = new List<PreviewTween>();
 
         // ─────────────────────────────────────────────────────────────────────
         // IAnimationBackend — TweenFloat
@@ -279,17 +283,25 @@ namespace DreamTech.UICore.Editor.Preview
         /// <summary>
         /// Cancel and remove every in-flight tween. Restores Punch/Shake targets.
         /// Unsubscribes from <see cref="EditorApplication.update"/>.
+        /// Safe to call mid-Tick — mutation is deferred when re-entrant.
         /// </summary>
         public void StopAll()
         {
-            // Restore targets before clearing so no stale offsets remain
+            // Restore targets and mark cancelled (always safe — these are pure value writes)
             foreach (var t in _activeTweens)
             {
                 RestoreTarget(t);
                 t.Handle.MarkCancelled();
             }
-            _activeTweens.Clear();
-            Unsubscribe();
+
+            // If we're currently mid-Tick (callback re-entered into StopAll), DO NOT mutate the list.
+            // The Tick loop's defensive guards will skip already-cancelled tweens and clean up
+            // pending removals at the end. This avoids ArgumentOutOfRangeException from index shift.
+            if (!_isTicking)
+            {
+                _activeTweens.Clear();
+                Unsubscribe();
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -320,15 +332,21 @@ namespace DreamTech.UICore.Editor.Preview
             // Guard against absurd dt values (editor paused/step, sleep, etc.)
             dt = Mathf.Clamp(dt, 0f, 0.1f);
 
+            _isTicking = true;
+            try
+            {
             for (int i = _activeTweens.Count - 1; i >= 0; i--)
             {
+                // Defensive: list may have shrunk via re-entrant StopAll (deferred removal),
+                // or the index could be out of range due to a removed-during-callback case.
+                if (i >= _activeTweens.Count) continue;
                 var tween = _activeTweens[i];
 
                 // Handle cancelled (Stop() called externally)
                 if (tween.Handle.IsCancelled)
                 {
                     RestoreTarget(tween);
-                    _activeTweens.RemoveAt(i);
+                    _pendingRemoval.Add(tween);
                     continue;
                 }
 
@@ -371,14 +389,34 @@ namespace DreamTech.UICore.Editor.Preview
                     RestoreTarget(tween);
 
                     tween.Handle.MarkCompleted();
+                    _pendingRemoval.Add(tween);
+                    // Callback may re-enter (e.g. PreviewSession.RestoreAndEnd → StopAll).
+                    // Marked _isTicking so re-entrant mutations are deferred and merged
+                    // into the same _pendingRemoval batch below.
                     tween.OnCompleteCallback?.Invoke();
-                    _activeTweens.RemoveAt(i);
+                }
+            }
+            }
+            finally
+            {
+                _isTicking = false;
+                // Apply all deferred removals safely (by reference, not by index).
+                if (_pendingRemoval.Count > 0)
+                {
+                    foreach (var t in _pendingRemoval) _activeTweens.Remove(t);
+                    _pendingRemoval.Clear();
                 }
             }
 
-            // Repaint all editor views so changes are visible in real time
+            // Force editor repaint at high cadence so preview looks smooth (not throttled
+            // to EditorApplication.update's idle rate of ~10 Hz). QueuePlayerLoopUpdate
+            // triggers a full player-loop tick in edit mode, driving Unity's repaint pipeline.
+            EditorApplication.QueuePlayerLoopUpdate();
             SceneView.RepaintAll();
             UnityEditorInternal.InternalEditorUtility.RepaintAllViews();
+            // Also nudge any focused InspectorWindow which doesn't always pick up RepaintAllViews
+            var focused = EditorWindow.focusedWindow;
+            if (focused != null) focused.Repaint();
 
             if (_activeTweens.Count == 0)
                 Unsubscribe();
