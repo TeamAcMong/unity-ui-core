@@ -182,29 +182,40 @@ namespace DreamTech.UICore.Editor.Drawers
             EditorGUI.DrawRect(new Rect(rect.x, rect.y, 3f, rect.height), accentColor);
 
             // ── Header row (32px tall) ─────────────────────────────────────────
-            const float headerH  = 32f;
-            const float padding  = 6f;
+            const float headerH    = 32f;
+            const float padding    = 6f;
+            const float menuBtnW   = 24f;
+            const float chevronW   = 14f;
+            const float pillW      = 56f;
+            const float gap        = 4f;
 
-            Rect headerRow = new Rect(rect.x + 3f + padding, rect.y, rect.width - 3f - padding * 2f - 24f, headerH);
+            // Whole-header click zone — used to toggle expand. Excludes interactive sub-rects below.
+            Rect headerRow = new Rect(rect.x + 3f, rect.y, rect.width - 3f, headerH);
 
-            // Drag handle icon (cosmetic)
-            float cx = headerRow.x;
+            // Right-side: ⋮ menu button (clearly separated)
+            Rect menuBtnRect = new Rect(rect.xMax - menuBtnW - 4f, rect.y + (headerH - 20f) * 0.5f, menuBtnW, 20f);
 
-            Rect dragRect = new Rect(cx, headerRow.y + (headerH - 16f) * 0.5f, 12f, 16f);
+            // Right-side: chevron indicator (decorative, no click — header itself handles click)
+            Rect chevronRect = new Rect(menuBtnRect.x - chevronW - gap, rect.y + (headerH - chevronW) * 0.5f, chevronW, chevronW);
+
+            // Left: drag handle (cosmetic, ReorderableList intercepts drag on left edge)
+            float cx = headerRow.x + padding;
+            Rect dragRect = new Rect(cx, headerRow.y + (headerH - 14f) * 0.5f, 12f, 14f);
             var handleContent = UIEditorStyles.IconDragHandle;
             if (handleContent?.image != null)
             {
-                GUI.color = new Color(1f, 1f, 1f, 0.40f);
+                GUI.color = new Color(1f, 1f, 1f, 0.35f);
                 GUI.DrawTexture(dragRect, handleContent.image, ScaleMode.ScaleToFit);
                 GUI.color = Color.white;
             }
             cx += 16f;
 
-            // Enabled toggle
+            // Enabled checkbox
+            Rect toggleRect = Rect.zero;
             var enabledProp = element.FindPropertyRelative("enabled");
             if (enabledProp != null)
             {
-                Rect toggleRect = new Rect(cx, headerRow.y + (headerH - 14f) * 0.5f, 14f, 14f);
+                toggleRect = new Rect(cx, headerRow.y + (headerH - 14f) * 0.5f, 14f, 14f);
                 EditorGUI.BeginChangeCheck();
                 bool newEnabled = EditorGUI.Toggle(toggleRect, enabledProp.boolValue);
                 if (EditorGUI.EndChangeCheck())
@@ -219,45 +230,71 @@ namespace DreamTech.UICore.Editor.Drawers
             if (moduleIcon?.image != null)
             {
                 Rect iconRect = new Rect(cx, headerRow.y + (headerH - 14f) * 0.5f, 14f, 14f);
+                GUI.color = new Color(accentColor.r, accentColor.g, accentColor.b, 0.85f);
                 GUI.DrawTexture(iconRect, moduleIcon.image, ScaleMode.ScaleToFit);
+                GUI.color = Color.white;
                 cx += 18f;
             }
 
-            // Display name
+            // Display name + pill — flex region between cx and chevronRect.x
             string displayName = GetModuleDisplayName(instance);
             string typeName    = instance != null ? FriendlyTypeName(instance.GetType().Name) : "null";
 
-            float availableForName = headerRow.xMax - cx - 60f; // reserve space for pill + arrows
-            Rect  nameRect = new Rect(cx, headerRow.y + (headerH - EditorGUIUtility.singleLineHeight) * 0.5f,
-                                      availableForName, EditorGUIUtility.singleLineHeight);
-            EditorGUI.LabelField(nameRect, displayName, UIEditorStyles.ModuleCardHeader);
-            cx += availableForName + 4f;
+            float rightZoneStart = chevronRect.x - gap;
+            float nameAvail      = rightZoneStart - cx - pillW - gap;
+            if (nameAvail < 30f) nameAvail = 30f;  // safety floor
 
-            // Type pill (muted, small)
-            float pillW = 52f;
-            Rect pillRect = new Rect(cx, headerRow.y + (headerH - 16f) * 0.5f, pillW, 16f);
+            Rect nameRect = new Rect(cx, headerRow.y + (headerH - EditorGUIUtility.singleLineHeight) * 0.5f,
+                                     nameAvail, EditorGUIUtility.singleLineHeight);
+            EditorGUI.LabelField(nameRect, displayName, UIEditorStyles.ModuleCardHeader);
+
+            Rect pillRect = new Rect(rightZoneStart - pillW, headerRow.y + (headerH - 16f) * 0.5f, pillW, 16f);
             var pillBg = UIEditorStyles.MakeTex(2, 2, new Color(accentColor.r, accentColor.g, accentColor.b, 0.18f));
             var pillStyle = new GUIStyle(UIEditorStyles.Pill)
             {
-                normal = { background = pillBg, textColor = isPro ? new Color(0.75f, 0.75f, 0.75f) : new Color(0.30f, 0.30f, 0.30f) },
+                normal   = { background = pillBg, textColor = isPro ? new Color(0.75f, 0.75f, 0.75f) : new Color(0.30f, 0.30f, 0.30f) },
                 fontSize = 9,
             };
             GUI.Label(pillRect, typeName, pillStyle);
-            cx += pillW + 4f;
 
-            // Foldout arrow
-            Rect arrowRect = new Rect(cx, headerRow.y + (headerH - 16f) * 0.5f, 16f, 16f);
-            GUIContent arrowContent = expanded ? UIEditorStyles.IconUnfold : UIEditorStyles.IconFold;
-            if (GUI.Button(arrowRect, arrowContent, GUIStyle.none))
+            // Chevron indicator (decorative, drawn last so it sits on top if any text bleeds)
+            GUI.color = new Color(1f, 1f, 1f, 0.65f);
+            var chevronContent = expanded ? UIEditorStyles.IconUnfold : UIEditorStyles.IconFold;
+            GUI.Label(chevronRect, chevronContent, EditorStyles.boldLabel);
+            GUI.color = Color.white;
+
+            // ⋮ context menu button — drawn AFTER everything so it always wins clicks in its rect
+            var menuBtnStyle = new GUIStyle(EditorStyles.miniButton)
             {
-                SetExpanded(expandKey, !expanded);
-            }
-
-            // ⋮ context menu button (right edge)
-            Rect menuBtnRect = new Rect(rect.xMax - 22f, rect.y + (headerH - 18f) * 0.5f, 18f, 18f);
-            if (GUI.Button(menuBtnRect, "⋮", EditorStyles.miniLabel))
+                fontSize = 14,
+                alignment = TextAnchor.MiddleCenter,
+                padding = new RectOffset(0, 0, -2, 0),
+            };
+            if (GUI.Button(menuBtnRect, "⋮", menuBtnStyle))
             {
                 ShowCardContextMenu(listProp, index, listKey);
+                GUIUtility.ExitGUI();
+                return;
+            }
+
+            // ── Whole-header click → toggle expand. Run AFTER drawing interactive sub-rects so
+            //    they consume their events first. We only act on MouseDown left button.
+            Event evt = Event.current;
+            if (evt.type == EventType.MouseDown && evt.button == 0
+                && headerRow.Contains(evt.mousePosition)
+                && !toggleRect.Contains(evt.mousePosition)
+                && !menuBtnRect.Contains(evt.mousePosition))
+            {
+                SetExpanded(expandKey, !expanded);
+                evt.Use();
+                GUIUtility.ExitGUI();
+                return;
+            }
+
+            // Subtle hover tint to communicate clickability of the header
+            if (headerRow.Contains(evt.mousePosition) && evt.type == EventType.Repaint)
+            {
+                EditorGUI.DrawRect(headerRow, new Color(1f, 1f, 1f, isPro ? 0.02f : 0.03f));
             }
 
             // ── Expanded properties (children only, skip property's own foldout) ──
@@ -327,10 +364,14 @@ namespace DreamTech.UICore.Editor.Drawers
             menu.AddItem(new GUIContent("Remove"), false, () =>
             {
                 var p = so.FindProperty(propPath);
-                // Two DeleteArrayElement calls needed when element has a managed reference
+                if (index < 0 || index >= p.arraySize) return;
+                // For [SerializeReference] list: must null the managed reference first,
+                // otherwise the first DeleteArrayElementAtIndex only nulls the slot
+                // (keeps array size) — leading callers to over-delete.
+                var elem = p.GetArrayElementAtIndex(index);
+                if (elem.propertyType == SerializedPropertyType.ManagedReference)
+                    elem.managedReferenceValue = null;
                 p.DeleteArrayElementAtIndex(index);
-                if (p.arraySize > index)
-                    p.DeleteArrayElementAtIndex(index);
                 so.ApplyModifiedProperties();
                 InvalidateListCache(listKey);
             });

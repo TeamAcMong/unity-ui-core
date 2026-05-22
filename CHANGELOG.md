@@ -5,6 +5,17 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2026-05-22
+
+### Fixed
+- **Remove module deleted multiple entries** — Context menu "Remove" called `DeleteArrayElementAtIndex` twice with a flaky `arraySize > index` guard. For `[SerializeReference]` lists where the element is non-null, the first call only nullifies the slot; the guard then triggered another deletion that removed an adjacent element. Fix: explicitly set `managedReferenceValue = null` first, then a single `DeleteArrayElementAtIndex` deterministically removes exactly one slot.
+- **Foldout arrow overlapped `⋮` menu button (~8px)** — both rects shared 8 pixels on the right edge, making it ambiguous which control receives clicks. New layout: chevron is now a **decorative indicator** (not a button) placed left of the menu button with explicit 4px gap; menu button has its own clearly-bounded 24px rect at the rightmost position.
+
+### Changed (UX)
+- **Click anywhere on card header to toggle expand/collapse** — previously only the small arrow icon was clickable. Now the entire header row toggles expand state, excluding the enabled toggle, drag handle, and `⋮` menu button. Hover tint added on the header to communicate clickability.
+- **Module icon now tinted with accent color** — visually reinforces the animation (blue) vs behavior (orange) distinction.
+- **`⋮` menu button gets a proper bordered miniButton style** instead of plain miniLabel, making it visually distinct from surrounding decorative icons.
+
 ## [0.3.3] - 2026-05-22
 
 ### Fixed
