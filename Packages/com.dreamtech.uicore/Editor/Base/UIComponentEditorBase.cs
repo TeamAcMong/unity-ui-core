@@ -122,7 +122,7 @@ namespace DreamTech.UICore.Editor.Base
                 EditorGUILayout.LabelField(subtitle, UIEditorStyles.HeroSubtitle);
             EditorGUILayout.EndVertical();
 
-            EditorGUILayout.FlexibleSpace();
+            GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.Space(6f);
             EditorGUILayout.EndVertical();

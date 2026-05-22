@@ -5,6 +5,11 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-05-22
+
+### Fixed
+- Compile error in `UIComponentEditorBase.cs:125` — `EditorGUILayout.FlexibleSpace` doesn't exist (must be `GUILayout.FlexibleSpace`).
+
 ## [0.3.0] - 2026-05-22
 
 ### Added — Editor Polish
