@@ -2,8 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using DreamTech.UICore.Animations;
 using DreamTech.UICore.Animations.Modules;
+using DreamTech.UICore.Base;
 using DreamTech.UICore.Behaviors;
+using DreamTech.UICore.Editor.Preview;
 using DreamTech.UICore.Editor.Styles;
 using UnityEditor;
 using UnityEditorInternal;
@@ -185,12 +188,13 @@ namespace DreamTech.UICore.Editor.Drawers
             EditorGUI.DrawRect(new Rect(rect.x, rect.y, 3f, rect.height), accentColor);
 
             // ── Header row (32px tall) ─────────────────────────────────────────
-            const float headerH    = 32f;
-            const float padding    = 6f;
-            const float menuBtnW   = 24f;
-            const float chevronW   = 14f;
-            const float pillW      = 56f;
-            const float gap        = 4f;
+            const float headerH      = 32f;
+            const float padding      = 6f;
+            const float menuBtnW     = 24f;
+            const float previewBtnW  = 20f;
+            const float chevronW     = 14f;
+            const float pillW        = 56f;
+            const float gap          = 4f;
 
             // Whole-header click zone — used to toggle expand. Excludes interactive sub-rects below.
             Rect headerRow = new Rect(rect.x + 3f, rect.y, rect.width - 3f, headerH);
@@ -198,8 +202,12 @@ namespace DreamTech.UICore.Editor.Drawers
             // Right-side: ⋮ menu button (clearly separated)
             Rect menuBtnRect = new Rect(rect.xMax - menuBtnW - 4f, rect.y + (headerH - 20f) * 0.5f, menuBtnW, 20f);
 
+            // Right-side: ▶ preview button (sits between chevron and ⋮)
+            Rect previewBtnRect = new Rect(menuBtnRect.x - previewBtnW - gap, rect.y + (headerH - 18f) * 0.5f, previewBtnW, 18f);
+
             // Right-side: chevron indicator (decorative, no click — header itself handles click)
-            Rect chevronRect = new Rect(menuBtnRect.x - chevronW - gap, rect.y + (headerH - chevronW) * 0.5f, chevronW, chevronW);
+            // Shifted left by (previewBtnW + gap) to make room for preview button
+            Rect chevronRect = new Rect(previewBtnRect.x - chevronW - gap, rect.y + (headerH - chevronW) * 0.5f, chevronW, chevronW);
 
             // Left: drag handle (cosmetic, ReorderableList intercepts drag on left edge)
             float cx = headerRow.x + padding;
@@ -264,6 +272,37 @@ namespace DreamTech.UICore.Editor.Drawers
             GUI.Label(chevronRect, chevronContent, EditorStyles.boldLabel);
             GUI.color = Color.white;
 
+            // ▶ per-module preview button
+            bool previewActive = PreviewSession.IsActive;
+            var previewStyle = new GUIStyle(EditorStyles.miniButton)
+            {
+                fontSize  = 10,
+                alignment = TextAnchor.MiddleCenter,
+                padding   = new RectOffset(0, 0, 0, 0),
+            };
+            using (new EditorGUI.DisabledScope(previewActive))
+            {
+                string previewTooltip = previewActive
+                    ? "Preview already running"
+                    : "Preview this module (Pressed state)";
+                var previewContent = new GUIContent(UIEditorStyles.IconPlay.image, previewTooltip);
+                if (GUI.Button(previewBtnRect, previewContent, previewStyle))
+                {
+                    var targetComponent = listProp.serializedObject.targetObject as UIAnimatedComponent;
+                    var moduleInstance  = element.managedReferenceValue as IAnimationModule;
+                    if (targetComponent != null && moduleInstance != null)
+                    {
+                        PreviewSession.PreviewModule(
+                            targetComponent,
+                            moduleInstance,
+                            UIState.Pressed,
+                            () => EditorUtility.SetDirty(targetComponent));
+                    }
+                    GUIUtility.ExitGUI();
+                    return;
+                }
+            }
+
             // ⋮ context menu button — drawn AFTER everything so it always wins clicks in its rect
             var menuBtnStyle = new GUIStyle(EditorStyles.miniButton)
             {
@@ -284,6 +323,7 @@ namespace DreamTech.UICore.Editor.Drawers
             if (evt.type == EventType.MouseDown && evt.button == 0
                 && headerRow.Contains(evt.mousePosition)
                 && !toggleRect.Contains(evt.mousePosition)
+                && !previewBtnRect.Contains(evt.mousePosition)
                 && !menuBtnRect.Contains(evt.mousePosition))
             {
                 SetExpanded(expandKey, !expanded);
