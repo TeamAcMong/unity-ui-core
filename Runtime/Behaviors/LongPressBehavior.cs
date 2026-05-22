@@ -73,7 +73,8 @@ namespace DreamTech.UICore.Behaviors
         {
             if (_detectCts != null)
             {
-                if (!_detectCts.IsCancellationRequested) _detectCts.Cancel();
+                try { if (!_detectCts.IsCancellationRequested) _detectCts.Cancel(); }
+                catch (ObjectDisposedException) { }
                 _detectCts = null;
             }
         }
@@ -103,6 +104,7 @@ namespace DreamTech.UICore.Behaviors
             finally
             {
                 cts.Dispose();
+                if (ReferenceEquals(_detectCts, cts)) _detectCts = null;
             }
         }
     }

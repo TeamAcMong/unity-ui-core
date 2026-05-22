@@ -98,7 +98,8 @@ namespace DreamTech.UICore.Animations.Sequence
             try
             {
                 var ct = host.GetCancellationTokenOnDestroy();
-                foreach (var step in _steps)
+                var stepsSnapshot = new List<Func<IAnimationHandle>>(_steps);
+                foreach (var step in stepsSnapshot)
                 {
                     if (!_isPlaying) break;
 
@@ -133,8 +134,9 @@ namespace DreamTech.UICore.Animations.Sequence
             {
                 var ct = host.GetCancellationTokenOnDestroy();
                 var waitTasks = new List<UniTask>();
+                var stepsSnapshot = new List<Func<IAnimationHandle>>(_steps);
 
-                foreach (var step in _steps)
+                foreach (var step in stepsSnapshot)
                 {
                     IAnimationHandle handle = step.Invoke();
                     if (handle == null) continue;
@@ -210,6 +212,7 @@ namespace DreamTech.UICore.Animations.Sequence
         {
             _isPlaying = false;
             _isCompleted = true;
+            _activeHandles?.Clear();  // release completed handle references (prevent stale refs + memory leak)
 
             foreach (Action cb in _onCompleteCallbacks)
                 cb?.Invoke();

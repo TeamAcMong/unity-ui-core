@@ -133,7 +133,13 @@ namespace DreamTech.UICore.Behaviors
             onChargesChanged?.Invoke(_currentCharges);
 
             // Start recovery loop nếu chưa chạy
-            if (_chargeRecoveryCts == null || _chargeRecoveryCts.IsCancellationRequested)
+            bool needNewLoop = _chargeRecoveryCts == null;
+            if (!needNewLoop)
+            {
+                try { needNewLoop = _chargeRecoveryCts.IsCancellationRequested; }
+                catch (ObjectDisposedException) { needNewLoop = true; }
+            }
+            if (needNewLoop)
             {
                 _chargeRecoveryRemaining = chargeRecoveryTime;
                 CancelChargeRecovery();
@@ -168,6 +174,7 @@ namespace DreamTech.UICore.Behaviors
             finally
             {
                 cts.Dispose();
+                if (ReferenceEquals(_timeCooldownCts, cts)) _timeCooldownCts = null;
             }
         }
 
@@ -205,6 +212,7 @@ namespace DreamTech.UICore.Behaviors
             finally
             {
                 cts.Dispose();
+                if (ReferenceEquals(_chargeRecoveryCts, cts)) _chargeRecoveryCts = null;
             }
         }
 
@@ -212,7 +220,8 @@ namespace DreamTech.UICore.Behaviors
         {
             if (_timeCooldownCts != null)
             {
-                if (!_timeCooldownCts.IsCancellationRequested) _timeCooldownCts.Cancel();
+                try { if (!_timeCooldownCts.IsCancellationRequested) _timeCooldownCts.Cancel(); }
+                catch (ObjectDisposedException) { }
                 _timeCooldownCts = null;
             }
         }
@@ -221,7 +230,8 @@ namespace DreamTech.UICore.Behaviors
         {
             if (_chargeRecoveryCts != null)
             {
-                if (!_chargeRecoveryCts.IsCancellationRequested) _chargeRecoveryCts.Cancel();
+                try { if (!_chargeRecoveryCts.IsCancellationRequested) _chargeRecoveryCts.Cancel(); }
+                catch (ObjectDisposedException) { }
                 _chargeRecoveryCts = null;
             }
         }
