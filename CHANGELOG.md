@@ -5,6 +5,17 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-05-22
+
+### Fixed
+- **Toggling `interactable` in Inspector during Play mode did not trigger animation** — `[SerializeField] interactable` is edited directly by Inspector, bypassing the public `SetInteractable()` entry point that fires the state-change → animation pipeline. Result: designer toggles the checkbox in Play mode → field updates, but button visual stays in its current state (no Disabled animation).
+  - Fix: `OnValidate()` (editor-only) on `InteractiveUIComponent` detects when `interactable` value changes vs. last-validated baseline, then defers an `ApplyState()` call via `EditorApplication.delayCall` (deferred because `OnValidate` cannot directly invoke animation pipeline). `_lastValidatedInteractable` initialised in `Awake` so first OnValidate after enter-play doesn't spuriously fire.
+  - Edit mode: still no auto-animation (default UniTask backend doesn't tick in edit mode). Use the **Preview Panel** at the top of the Animation tab to visualize Disabled / Hover / Pressed states without entering Play.
+
+### Notes
+- `clickCooldown` is anti-spam timing — by design no visual effect, not a bug.
+- Module config edits (Scale values, Color targets, curves, duration) likewise don't auto-replay animation. By design — use Preview Panel to test config changes interactively.
+
 ## [0.7.0] - 2026-05-22
 
 Audit-driven release — comprehensive sweep for 5 bug patterns established in 0.6.x: ObjectDisposedException on disposed CTS, stale handles in tracking collections, re-entrant collection mutation, lambda capture loop variable, edit-mode tick throttle.
