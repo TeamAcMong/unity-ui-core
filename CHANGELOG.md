@@ -5,6 +5,14 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2026-05-22
+
+### Fixed
+- **Module card expanded content overflow** — expanded properties drew beyond card boundary, invading next card's area.
+  - Root cause: `elementHeightCallback` returned `propHeight - oneLineHeight` (subtracting the foldout header) but `PropertyField(includeChildren: true)` still rendered the full property height including its own foldout, causing visual overflow.
+  - Fix: added `GetManagedReferenceChildrenHeight` + `DrawManagedReferenceChildren` helpers that iterate child properties directly (skipping the managed reference's own foldout header). Height calculation and rendering now match exactly.
+- **Duplicate foldout header** — every expanded module card showed two foldouts: the card's own header arrow + the property's auto-generated foldout. Now only the card header is shown; children render flat below.
+
 ## [0.3.2] - 2026-05-22
 
 ### Fixed

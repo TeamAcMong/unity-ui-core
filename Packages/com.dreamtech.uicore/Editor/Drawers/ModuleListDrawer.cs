@@ -130,16 +130,16 @@ namespace DreamTech.UICore.Editor.Drawers
                 string expandKey = key + "[" + index + "]";
                 bool expanded = GetExpanded(expandKey);
 
-                if (!expanded) return 32f;
+                if (!expanded) return 34f;
 
                 var prop = rl.serializedProperty;
-                if (prop == null || index >= prop.arraySize) return 32f;
+                if (prop == null || index >= prop.arraySize) return 34f;
 
                 var element = prop.GetArrayElementAtIndex(index);
-                if (element.managedReferenceValue == null) return 32f;
+                if (element.managedReferenceValue == null) return 34f;
 
-                float propHeight = EditorGUI.GetPropertyHeight(element, GUIContent.none, true);
-                return 32f + Mathf.Max(0f, propHeight - EditorGUIUtility.singleLineHeight) + 8f;
+                float childrenH = GetManagedReferenceChildrenHeight(element);
+                return 32f + 6f + childrenH + 8f + 2f;
             };
 
             rl.drawElementCallback = (rect, index, isActive, isFocused) =>
@@ -260,18 +260,17 @@ namespace DreamTech.UICore.Editor.Drawers
                 ShowCardContextMenu(listProp, index, listKey);
             }
 
-            // ── Expanded properties ────────────────────────────────────────────
+            // ── Expanded properties (children only, skip property's own foldout) ──
             if (expanded && instance != null)
             {
-                float contentY = rect.y + headerH + 4f;
-                float contentH = rect.height - headerH - 8f;
-                if (contentH > 0f)
-                {
-                    Rect contentRect = new Rect(rect.x + 8f, contentY, rect.width - 16f, contentH);
-                    EditorGUI.indentLevel++;
-                    EditorGUI.PropertyField(contentRect, element, GUIContent.none, true);
-                    EditorGUI.indentLevel--;
-                }
+                Rect contentRect = new Rect(
+                    rect.x + 12f,
+                    rect.y + headerH + 6f,
+                    rect.width - 20f,
+                    rect.height - headerH - 14f);
+                EditorGUI.indentLevel++;
+                DrawManagedReferenceChildren(contentRect, element);
+                EditorGUI.indentLevel--;
             }
 
             // Bottom separator line
@@ -526,6 +525,51 @@ namespace DreamTech.UICore.Editor.Drawers
         private static void InvalidateListCache(string key)
         {
             _listCache.Remove(key);
+        }
+
+        // ── Children iteration (skip the [SerializeReference]'s own foldout header) ──
+
+        /// <summary>
+        /// Tổng height của tất cả children fields trong managed reference element,
+        /// không tính foldout header của chính element. Dùng cho elementHeightCallback.
+        /// </summary>
+        private static float GetManagedReferenceChildrenHeight(SerializedProperty parent)
+        {
+            float total = 0f;
+            int count = 0;
+            SerializedProperty iter = parent.Copy();
+            SerializedProperty end = iter.GetEndProperty();
+            bool enterChildren = true;
+            while (iter.NextVisible(enterChildren))
+            {
+                enterChildren = false;
+                if (SerializedProperty.EqualContents(iter, end)) break;
+                total += EditorGUI.GetPropertyHeight(iter, true);
+                count++;
+            }
+            if (count > 0) total += EditorGUIUtility.standardVerticalSpacing * (count - 1);
+            return total;
+        }
+
+        /// <summary>
+        /// Draw chỉ children fields của managed reference (skip foldout header của element).
+        /// Tránh duplicate foldout với card header đã có.
+        /// </summary>
+        private static void DrawManagedReferenceChildren(Rect rect, SerializedProperty parent)
+        {
+            float y = rect.y;
+            SerializedProperty iter = parent.Copy();
+            SerializedProperty end = iter.GetEndProperty();
+            bool enterChildren = true;
+            while (iter.NextVisible(enterChildren))
+            {
+                enterChildren = false;
+                if (SerializedProperty.EqualContents(iter, end)) break;
+                float h = EditorGUI.GetPropertyHeight(iter, true);
+                Rect r = new Rect(rect.x, y, rect.width, h);
+                EditorGUI.PropertyField(r, iter, true);
+                y += h + EditorGUIUtility.standardVerticalSpacing;
+            }
         }
     }
 }
