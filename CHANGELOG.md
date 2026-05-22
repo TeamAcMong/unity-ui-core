@@ -5,6 +5,13 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-05-22
+
+### Fixed
+- **ModuleListDrawer NullReferenceException** — `ReorderableList` callbacks captured the original `SerializedProperty` parameter in lambda closures. Across Inspector redraws (selection change, scene reload, prefab open/close), the underlying `SerializedObject` gets disposed but the cached `ReorderableList` instance still held the stale property reference, throwing `NullReferenceException: SerializedObject... has been Disposed` on `GetArrayElementAtIndex`.
+
+  Fix: callbacks now read from `rl.serializedProperty` (re-bound each `Draw()` call) instead of the captured `listProp` parameter. Added defensive null/range checks before `GetArrayElementAtIndex`.
+
 ## [0.3.1] - 2026-05-22
 
 ### Fixed

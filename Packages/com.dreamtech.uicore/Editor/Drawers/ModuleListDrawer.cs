@@ -114,7 +114,8 @@ namespace DreamTech.UICore.Editor.Drawers
                 return existing;
             }
 
-            var rl = new ReorderableList(
+            ReorderableList rl = null;
+            rl = new ReorderableList(
                 listProp.serializedObject,
                 listProp,
                 draggable:    true,
@@ -124,31 +125,32 @@ namespace DreamTech.UICore.Editor.Drawers
 
             rl.showDefaultBackground = false;
 
-            // Element height: we compute it dynamically
             rl.elementHeightCallback = (index) =>
             {
                 string expandKey = key + "[" + index + "]";
                 bool expanded = GetExpanded(expandKey);
 
-                if (!expanded) return 32f; // collapsed card header only
+                if (!expanded) return 32f;
 
-                var element = listProp.GetArrayElementAtIndex(index);
+                var prop = rl.serializedProperty;
+                if (prop == null || index >= prop.arraySize) return 32f;
+
+                var element = prop.GetArrayElementAtIndex(index);
                 if (element.managedReferenceValue == null) return 32f;
 
-                // Header + property content height
                 float propHeight = EditorGUI.GetPropertyHeight(element, GUIContent.none, true);
-                // propHeight includes the top-level element; subtract one line (header is drawn separately)
                 return 32f + Mathf.Max(0f, propHeight - EditorGUIUtility.singleLineHeight) + 8f;
             };
 
             rl.drawElementCallback = (rect, index, isActive, isFocused) =>
             {
-                DrawModuleCard(rect, listProp, index, key, accentColor, moduleIcon);
+                var prop = rl.serializedProperty;
+                if (prop == null || index >= prop.arraySize) return;
+                DrawModuleCard(rect, prop, index, key, accentColor, moduleIcon);
             };
 
             rl.drawElementBackgroundCallback = (rect, index, isActive, isFocused) =>
             {
-                // We paint our own backgrounds in drawElementCallback
             };
 
             _listCache[key] = rl;
