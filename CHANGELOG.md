@@ -5,6 +5,41 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-05-22
+
+Audit-driven release — comprehensive sweep for 5 bug patterns established in 0.6.x: ObjectDisposedException on disposed CTS, stale handles in tracking collections, re-entrant collection mutation, lambda capture loop variable, edit-mode tick throttle.
+
+### Fixed
+
+**BLOCKER — ObjectDisposedException in 3 Behaviors** (`CooldownBehavior`, `LongPressBehavior`, `HoldRepeatBehavior`)
+- Async methods (`RunTimeCooldownAsync`, `RunChargeRecoveryAsync`, `RunDetectionAsync`, `RunRepeatAsync`) disposed their `CancellationTokenSource` in `finally` but did NOT self-clear the field. Subsequent callers accessing `IsCancellationRequested` on the disposed CTS threw `ObjectDisposedException`.
+- Fix: `ReferenceEquals(_field, cts)` guard in each `finally` block nulls the field only when the CTS still matches. All `Cancel*` helpers and `ConsumeCharge` access are wrapped in `try/catch ObjectDisposedException` defensively.
+- Reproducible by: hovering a button → animation completes naturally → hovering again (the second `StopActiveAnimations` accessed the disposed CTS of the now-finished tween). User-reported.
+
+**HIGH — `AdvancedProgressBar.Flash` phase race**
+- Rapid successive `Flash()` calls orphaned the Phase 1 handle: Phase 1's `OnComplete` callback unconditionally overwrote `_flashHandle` with Phase 2, even when a newer `Flash()` had already replaced it.
+- Fix: capture `phase1` in a local variable, `ReferenceEquals(_flashHandle, phase1)` guard in the callback returns early if superseded. `_flashHandle = null` after `Stop()` ensures clean slate.
+
+**HIGH — `AnimationSequence` stale handle references**
+- `MarkComplete()` did not clear `_activeHandles` → completed handles remained referenced (memory leak risk + `Stop()` on completed handle risk if sequence replayed).
+- Fix: `_activeHandles?.Clear()` at top of `MarkComplete()`.
+
+**MEDIUM — `PreviewAnimationBackend` double-restore on `StopAll` mid-Tick**
+- `StopAll()` called `RestoreTarget` for every active tween, then when `_isTicking == true` the deferred Tick loop's `IsCancelled` branch called `RestoreTarget` again on the same tweens.
+- Fix: when `_isTicking`, add all active tweens to `_pendingRemoval`; Tick's `IsCancelled` branch skips re-restoring tweens already in `_pendingRemoval`.
+
+**MEDIUM — `AnimationSequence` foreach mutation risk**
+- `RunSequential` and `RunParallel` iterated `_steps` directly. A completion callback calling `Append()` mid-iteration would throw `InvalidOperationException: Collection was modified`.
+- Fix: snapshot `_steps` into a local `List<Func<IAnimationHandle>>` before iterating in both methods.
+
+**LOW — `PreviewSession.ScheduleAutoRestore` duplicate subscribe**
+- `EditorApplication.update += MonitorTick` was called unconditionally; preview chaining could stack multiple subscriptions, causing `MonitorTick` to fire multiple times per frame.
+- Fix: `_monitorSubscribed` static flag deduplicates subscription; cleared in both unsubscribe paths.
+
+### Notes
+
+Audit verified clean (no remaining instances of the 5 patterns): `UniTaskAnimationBackend` (already idempotent in 0.6.2), `AnimationBackendRegistry`, `InteractiveUIComponent` (for-loop free of callback mutation), all 7 animation modules, `AnimatedButton`, `AnimatedToggle`, all Editor inspectors, `UIPreviewPanel`, `UIComponentEditorBase`, `CooldownOverlay`.
+
 ## [0.6.2] - 2026-05-22
 
 ### Fixed
