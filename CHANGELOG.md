@@ -5,6 +5,11 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-05-22
+
+### Fixed
+- **Redundant foldout wrapper on `AnimationEventHooks` field** — the inspector showed an unnecessary "Animation Event Hooks" foldout (from Unity's default property rendering for `[Serializable]` classes) wrapped inside the already-grouped section card. New `AnimationEventHooksDrawer` (a `[CustomPropertyDrawer]`) renders the three `UnityEvent` fields inline with no parent foldout. Each `UnityEvent` keeps its own native foldout (per Unity convention). Net result: one section card + three event foldouts, no extra middle wrapper.
+
 ## [0.4.0] - 2026-05-22
 
 ### Fixed
