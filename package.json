@@ -1,0 +1,16 @@
+{
+  "name": "com.dreamtech.uicore",
+  "version": "0.2.0",
+  "displayName": "DreamTech UI Core",
+  "description": "Modular UI animation framework with UniTask backend. Plug-in animation modules via Inspector ([SerializeReference, SubclassSelector]). Includes AnimatedButton, AnimatedToggle, CooldownButton, AdvancedProgressBar.",
+  "unity": "2022.3",
+  "dependencies": {
+    "com.unity.ugui": "1.0.0",
+    "com.unity.textmeshpro": "3.0.6",
+    "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
+  },
+  "keywords": ["ui", "animation", "button", "progressbar", "modular"],
+  "author": {
+    "name": "DreamTech"
+  }
+}
