@@ -36,6 +36,10 @@ namespace DreamTech.UICore.Base
         protected bool isPointerInside;
         protected bool isPointerDown;
         protected float lastClickTime = -999f;
+#if UNITY_EDITOR
+        // Tracks the last validated 'interactable' value so OnValidate detects Inspector edits.
+        private bool _lastValidatedInteractable = true;
+#endif
 
         public bool IsInteractable => interactable;
         public UIState CurrentState => currentUIState;
@@ -55,7 +59,35 @@ namespace DreamTech.UICore.Base
             // ApplyState skip nếu equal → force set field để initial state đúng (Normal là default).
             currentUIState = initial;
             // animate:false → không chạy animation lúc Awake (giữ behavior cũ).
+#if UNITY_EDITOR
+            _lastValidatedInteractable = interactable;
+#endif
         }
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// Phát hiện Inspector edit trên <c>interactable</c> và trigger animation chuyển state.
+        /// Lý do tồn tại: <see cref="SetInteractable"/> là entry point chính trigger state animation,
+        /// nhưng Inspector edit field trực tiếp KHÔNG đi qua method này — animation sẽ không chạy
+        /// nếu chỉ click checkbox. OnValidate hook lại Inspector edits trong Play mode.
+        /// </summary>
+        protected virtual void OnValidate()
+        {
+            if (!Application.isPlaying) return;
+            if (_lastValidatedInteractable == interactable) return;
+            _lastValidatedInteractable = interactable;
+
+            // Defer: OnValidate cấm SendMessage / instantiate. delayCall fires ngay editor frame sau,
+            // an toàn để invoke animation pipeline.
+            bool target = interactable;
+            UnityEditor.EditorApplication.delayCall += () =>
+            {
+                if (this == null) return;
+                // Re-apply state. Bypass SetInteractable's early-return guard vì field đã được set.
+                ApplyState(target ? ComputeStateForInteractable() : UIState.Disabled);
+            };
+        }
+#endif
 
         /// <summary>Dispose tất cả behaviors trước khi base cleanup animation.</summary>
         protected override void OnDestroy()

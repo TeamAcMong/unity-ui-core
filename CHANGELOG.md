@@ -5,6 +5,16 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-05-22
+
+### Fixed
+- **Toggling `interactable` in Inspector during Play mode did not trigger animation** — `[SerializeField] interactable` is edited directly by Inspector, bypassing the public `SetInteractable()` entry point. Fix: `OnValidate()` (editor-only) on `InteractiveUIComponent` detects value changes and defers `ApplyState()` via `EditorApplication.delayCall`.
+- Edit mode: still no auto-animation (UniTask backend doesn't tick in edit mode). Use the Preview Panel to test states without entering Play.
+
+### Notes
+- `clickCooldown` is anti-spam timing — by design no visual effect.
+- Module config edits don't auto-replay animation by design — use Preview Panel.
+
 ## [0.7.0] - 2026-05-22
 
 ### Fixed
