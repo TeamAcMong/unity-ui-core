@@ -1,4 +1,5 @@
 using DreamTech.UICore.Animations.Modules;
+using DreamTech.UICore.Base;
 using DreamTech.UICore.Behaviors;
 using DreamTech.UICore.Buttons;
 using DreamTech.UICore.Editor.Base;
@@ -61,6 +62,10 @@ namespace DreamTech.UICore.Editor.Inspectors
 
         private void DrawAnimationTab()
         {
+            // Preview panel at the top of the Animation tab
+            UIPreviewPanel.Draw(target as UIAnimatedComponent, this);
+            EditorGUILayout.Space(8f);
+
             SerializedProperty animModulesProp = serializedObject.FindProperty("animationModules");
             if (animModulesProp != null)
             {

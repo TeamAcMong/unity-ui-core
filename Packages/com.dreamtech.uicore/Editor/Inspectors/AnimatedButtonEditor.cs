@@ -1,4 +1,5 @@
 using DreamTech.UICore.Animations.Modules;
+using DreamTech.UICore.Base;
 using DreamTech.UICore.Behaviors;
 using DreamTech.UICore.Buttons;
 using DreamTech.UICore.Editor.Base;
@@ -57,10 +58,14 @@ namespace DreamTech.UICore.Editor.Inspectors
             EndSectionCard();
         }
 
-        // ── Animation tab: ModuleListDrawer + AnimationEventHooks ──────────────
+        // ── Animation tab: Preview Panel + ModuleListDrawer + AnimationEventHooks ──
 
         private void DrawAnimationTab()
         {
+            // Preview panel at the top of the Animation tab
+            UIPreviewPanel.Draw(target as UIAnimatedComponent, this);
+            EditorGUILayout.Space(8f);
+
             SerializedProperty animModulesProp = serializedObject.FindProperty("animationModules");
             if (animModulesProp != null)
             {

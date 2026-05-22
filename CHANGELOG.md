@@ -5,6 +5,21 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-05-22
+
+### Added
+- **Edit-mode Animation Preview** — designers can preview animations without entering Play mode.
+  - **Per-module ▶ button** on each animation module card — click to preview that module solo (default targetState = Pressed). Button is disabled (with tooltip) while another preview is already running.
+  - **State-based Preview Panel** at the top of the Animation tab in AnimatedButton/AnimatedToggle inspectors: dropdown to choose UIState + ▶ Play / ↺ Reset buttons + real-time progress bar.
+  - Backend `PreviewAnimationBackend` (IAnimationBackend impl) drives tweens via `EditorApplication.update` — no UniTask dependency in edit mode.
+  - `PreviewSession` manages lifecycle: snapshot state → swap backend → run preview → restore on completion / cancellation.
+  - Lifecycle guards: auto-cancel & restore on selection change, entering Play mode, or Domain Reload.
+  - Snapshot covers all Transforms + Graphic colors + CanvasGroup alpha in the hierarchy.
+  - No Undo history pollution — restore does not call `Undo.RecordObject`.
+  - Preview only works on **scene instances** (not prefab assets in the Project view). A HelpBox informs the user when a prefab asset is selected.
+  - AnimationEventHooks are NOT fired during edit-mode preview (no SFX in edit mode — by design).
+- **`UIPreviewPanel`** (`Editor/Base/UIPreviewPanel.cs`) — static helper callable from any UIAnimatedComponent inspector to render the preview panel.
+
 ## [0.5.0] - 2026-05-22
 
 ### Added
