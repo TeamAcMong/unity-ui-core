@@ -27,6 +27,10 @@ namespace DreamTech.UICore.Base
         [Tooltip("Anti-double-click guard (giây, unscaled). 0 = không guard.")]
         [SerializeField, Range(0f, 1f)] protected float clickCooldown = 0.1f;
 
+        [Tooltip("Bỏ qua state Hover khi con trỏ là ngón tay (touch). Trên điện thoại, chạm xuống sinh ra PointerEnter ngay " +
+                 "trước PointerDown — không bỏ thì nút loé cỡ Hover một frame rồi mới co.")]
+        [SerializeField] protected bool ignoreHoverOnTouch = true;
+
         [Header("Behavior Modules")]
         [Tooltip("Add behaviors (Cooldown, LongPress, MultiClick, ...) qua dropdown. Custom modules tự xuất hiện nếu implement IBehaviorModule và mark [Serializable].")]
         [SerializeReference, SubclassSelector]
@@ -115,9 +119,12 @@ namespace DreamTech.UICore.Base
         protected virtual UIState ComputeStateForInteractable()
         {
             if (isPointerDown) return UIState.Pressed;
-            if (isPointerInside) return UIState.Hover;
+            if (isPointerInside && !hoverSuppressedByTouch) return UIState.Hover;
             return UIState.Normal;
         }
+
+        /// <summary>Con trỏ đang ở trong là ngón tay và <see cref="ignoreHoverOnTouch"/> bật — nhả ra thì về Normal.</summary>
+        protected bool hoverSuppressedByTouch;
 
         /// <summary>Subclass implement: xử lý click action (fire onClick, toggle, ...).</summary>
         protected abstract void OnInteract();
@@ -129,9 +136,14 @@ namespace DreamTech.UICore.Base
         public virtual void OnPointerEnter(PointerEventData eventData)
         {
             isPointerInside = true;
+            hoverSuppressedByTouch = ignoreHoverOnTouch && IsTouch(eventData);
             if (!interactable) return;
+            if (hoverSuppressedByTouch) return;
             if (!isPointerDown) ApplyState(UIState.Hover);
         }
+
+        /// <summary>Touch có pointerId ≥ 0; chuột dùng -1/-2/-3.</summary>
+        protected static bool IsTouch(PointerEventData eventData) => eventData != null && eventData.pointerId >= 0;
 
         public virtual void OnPointerExit(PointerEventData eventData)
         {
@@ -142,6 +154,7 @@ namespace DreamTech.UICore.Base
 
         public virtual void OnPointerDown(PointerEventData eventData)
         {
+            hoverSuppressedByTouch = ignoreHoverOnTouch && IsTouch(eventData);
             if (!interactable) return;
             isPointerDown = true;
             ApplyState(UIState.Pressed);

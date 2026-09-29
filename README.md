@@ -1,9 +1,9 @@
 # Unity UI Core
 
-> Modular UI framework for Unity 6 with UniTask backend. Plug-in animation & behavior modules via Inspector — no code required for common cases.
+> Modular UI framework for Unity with UniTask backend. Plug-in animation & behavior modules via Inspector — no code required for common cases.
 
-[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/TeamAcMong/unity-ui-core/releases)
-[![Unity](https://img.shields.io/badge/unity-6000.0%2B-black.svg)](https://unity.com/)
+[![Version](https://img.shields.io/badge/version-0.8.0-blue.svg)](https://github.com/TeamAcMong/unity-ui-core/releases)
+[![Unity](https://img.shields.io/badge/unity-2022.3%2B-black.svg)](https://unity.com/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ## ✨ Features
@@ -15,6 +15,13 @@
 - **UniTask backend** — zero DOTween dependency, linked cancellation on GameObject destroy
 - **Hybrid architecture** — control types separate (Button, Toggle), behaviors composable
 - **Components included:** AnimatedButton, AnimatedToggle, AdvancedProgressBar, CooldownOverlay
+- **ButtonFeedback** — press feedback for the uGUI `Button` / `Toggle` you already have: shared profiles, press/release curves with a
+  small overshoot, touch area that does not shrink with the art, scroll-aware presses, and a single hook for click sound / haptics
+- **Virtual List / Grid** — `VirtualListView` and `VirtualGridView` keep views only for visible items (10 000 items ≈ a few dozen views):
+  four directions, mixed item types, fixed / per-template / adapter / measured sizes with scroll anchoring, nearest or paged snapping,
+  scroll-to-index, focus and load-more events, nested scroll hand-off, and an editor with **edit-mode preview**, snap diagram, scene
+  gizmos, play-mode tools and ready-made presets (list, grid, page view, chat)
+- **Unscaled-time backend option** — UI keeps its pace during slow-motion or pause
 - **Editor support** — tab system, custom drawer with auto-discovery dropdown
 
 ## 📦 Installation
@@ -25,7 +32,7 @@
 2. Click **`+`** → **Add package from git URL**
 3. Paste:
    ```
-   https://github.com/TeamAcMong/unity-ui-core.git#0.2.0
+   https://github.com/TeamAcMong/unity-ui-core.git#0.8.0
    ```
 
 ### Via manifest.json
@@ -33,7 +40,7 @@
 ```json
 {
   "dependencies": {
-    "com.dreamtech.uicore": "https://github.com/TeamAcMong/unity-ui-core.git#0.2.0",
+    "com.dreamtech.uicore": "https://github.com/TeamAcMong/unity-ui-core.git#0.8.0",
     "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
   }
 }
@@ -45,7 +52,39 @@
 https://github.com/TeamAcMong/unity-ui-core.git
 ```
 
-> **Requirements:** Unity 6000.0+, UniTask (auto-installed as dependency).
+> **Requirements:** Unity 2022.3+ (tested on 2022.3.62f2 and 6000.5.7f1), UniTask (auto-installed as dependency).
+
+## 🔘 Button Feedback (existing uGUI buttons)
+
+```csharp
+// Bootstrap — once
+ButtonFeedback.DefaultProfile = myProfile;              // ButtonFeedbackProfile asset: shared press numbers
+ButtonFeedbackCues.Handler = (source, key) =>           // the package plays no sound by itself
+{
+    if (key == "click") { MyAudio.Play("ui_click"); MyHaptics.Light(); }
+};
+
+ButtonFeedback.RegisterAll(popupRoot);                  // every Button/Toggle under the popup
+```
+
+Or select a popup and use *GameObject ▸ DreamTech UI Core ▸ Add Button Feedback To Buttons Under Selection*. Details in the
+[package README](Packages/com.dreamtech.uicore/README.md).
+
+## 📜 Virtual List / Grid
+
+Fastest start: *GameObject ▸ DreamTech UI Core ▸ Virtual List (Vertical)* — or Horizontal, Grid, Page View (carousel), Chat List —
+then press Play (a demo filler binds 200 items). In code:
+
+```csharp
+list.SetItems(rows.Count,
+    bind:   (item, index) => item.GetCachedComponent<RowView>().Show(rows[index]),
+    typeOf: index => rows[index].IsHeader ? 1 : 0);      // template 1 = group header
+
+list.ScrollToIndex(42, viewportPivot: 0.5f, itemPivot: 0.5f);
+list.NotifyDataSetChanged();                              // data changed, keep the reading position
+```
+
+See the [package README](Packages/com.dreamtech.uicore/README.md) for size modes, snapping, events, nested scrolling and recipes.
 
 ## 🚀 Quick Start
 
