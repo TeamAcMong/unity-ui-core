@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using Cysharp.Threading.Tasks;
 using DreamTech.UICore.Animations.Backends;
+using DreamTech.UICore.Base;
 using UnityEngine;
 
 namespace DreamTech.UICore.Animations.Sequence
@@ -32,6 +32,7 @@ namespace DreamTech.UICore.Animations.Sequence
         private readonly List<Action> _onCompleteCallbacks = new List<Action>();
 
         private List<IAnimationHandle> _activeHandles;
+        private FrameLoopHandle _waitLoop;
         private bool _isPlaying;
         private bool _isCompleted;
 
@@ -86,84 +87,91 @@ namespace DreamTech.UICore.Animations.Sequence
             _activeHandles = new List<IAnimationHandle>();
 
             if (_mode == AnimationSequenceMode.Parallel)
-                RunParallel(host).Forget();
+                RunParallel(host);
             else
-                RunSequential(host).Forget();
+                RunSequential(host);
 
             return this;
         }
 
-        private async UniTaskVoid RunSequential(MonoBehaviour host)
+        /// <summary>Bước đã xong hoặc bị dừng từ bên ngoài — sang bước kế.</summary>
+        private static bool IsDone(IAnimationHandle handle) => !handle.IsPlaying || handle.IsCompleted;
+
+        private void RunSequential(MonoBehaviour host)
         {
-            try
+            var stepsSnapshot = new List<Func<IAnimationHandle>>(_steps);
+            int nextStep = 0;
+            IAnimationHandle waiting = null;
+
+            // Chạy tiếp các bước cho tới bước đầu tiên phải chờ. Trả false khi hết bước hoặc sequence đã bị Stop.
+            bool StartNextStep()
             {
-                var ct = host.GetCancellationTokenOnDestroy();
-                var stepsSnapshot = new List<Func<IAnimationHandle>>(_steps);
-                foreach (var step in stepsSnapshot)
+                while (nextStep < stepsSnapshot.Count)
                 {
-                    if (!_isPlaying) break;
-
-                    IAnimationHandle handle = step.Invoke();
+                    if (!_isPlaying) return false;
+                    IAnimationHandle handle = stepsSnapshot[nextStep++].Invoke();
                     if (handle == null) continue;
-
                     _activeHandles.Add(handle);
-
-                    // Wait until handle stops playing (completed or stopped externally)
-                    await UniTask.WaitUntil(
-                        () => !handle.IsPlaying || handle.IsCompleted,
-                        cancellationToken: ct);
+                    waiting = handle;
+                    return true;
                 }
+                return false;
+            }
 
-                // Only fire completion callbacks when sequence ran to natural end,
-                // not when Stop() was called externally (_isPlaying set to false).
-                if (_isPlaying)
-                    MarkComplete();
-                else
-                    _isPlaying = false;
-            }
-            catch (OperationCanceledException)
+            if (!StartNextStep())
             {
-                // Host was destroyed; clean up silently
-                _isPlaying = false;
+                FinishRun();
+                return;
             }
+
+            // Như bản await: mỗi bước được kiểm từ khung hình sau; host bị destroy thì bỏ ngang, không báo xong.
+            _waitLoop = FrameLoop.Run(host, (deltaTime, unscaledDeltaTime) =>
+            {
+                if (!IsDone(waiting)) return true;
+                if (StartNextStep()) return true;
+                FinishRun();
+                return false;
+            }, () => _isPlaying = false);
         }
 
-        private async UniTaskVoid RunParallel(MonoBehaviour host)
+        private void RunParallel(MonoBehaviour host)
         {
-            try
+            var stepsSnapshot = new List<Func<IAnimationHandle>>(_steps);
+            var waiting = new List<IAnimationHandle>();
+            foreach (var step in stepsSnapshot)
             {
-                var ct = host.GetCancellationTokenOnDestroy();
-                var waitTasks = new List<UniTask>();
-                var stepsSnapshot = new List<Func<IAnimationHandle>>(_steps);
+                IAnimationHandle handle = step.Invoke();
+                if (handle == null) continue;
+                _activeHandles.Add(handle);
+                waiting.Add(handle);
+            }
 
-                foreach (var step in stepsSnapshot)
+            if (waiting.Count == 0)
+            {
+                FinishRun();
+                return;
+            }
+
+            _waitLoop = FrameLoop.Run(host, (deltaTime, unscaledDeltaTime) =>
+            {
+                foreach (IAnimationHandle handle in waiting)
                 {
-                    IAnimationHandle handle = step.Invoke();
-                    if (handle == null) continue;
-
-                    _activeHandles.Add(handle);
-
-                    // Capture handle for closure
-                    IAnimationHandle captured = handle;
-                    waitTasks.Add(UniTask.WaitUntil(
-                        () => !captured.IsPlaying || captured.IsCompleted,
-                        cancellationToken: ct));
+                    if (!IsDone(handle)) return true;
                 }
+                FinishRun();
+                return false;
+            }, () => _isPlaying = false);
+        }
 
-                await UniTask.WhenAll(waitTasks);
-
-                // Only fire completion callbacks when sequence ran to natural end,
-                // not when Stop() was called externally (_isPlaying set to false).
-                if (_isPlaying)
-                    MarkComplete();
-                else
-                    _isPlaying = false;
-            }
-            catch (OperationCanceledException)
-            {
-                // Host was destroyed; clean up silently
+        /// <summary>
+        /// Chỉ báo xong khi chạy hết tự nhiên — không báo khi <see cref="Stop"/> đã được gọi (<c>_isPlaying</c> = false).
+        /// </summary>
+        private void FinishRun()
+        {
+            if (_isPlaying)
+                MarkComplete();
+            else
                 _isPlaying = false;
-            }
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -176,6 +184,8 @@ namespace DreamTech.UICore.Animations.Sequence
         public void Stop()
         {
             _isPlaying = false;
+            _waitLoop?.Cancel();
+            _waitLoop = null;
 
             if (_activeHandles != null)
             {

@@ -1,6 +1,4 @@
 using System;
-using System.Threading;
-using Cysharp.Threading.Tasks;
 using DreamTech.UICore.Animations;
 using DreamTech.UICore.Base;
 using DreamTech.UICore.Buttons;  // CooldownOverlay
@@ -24,8 +22,7 @@ namespace DreamTech.UICore.Behaviors
     /// <item><b>ChargeBased</b>: Có <paramref name="maxCharges"/> charge, mỗi click tốn 1, recovery <paramref name="chargeRecoveryTime"/>s/charge.</item>
     /// </list>
     /// </para>
-    /// CTS lifecycle: dispose trong <c>finally</c> của async method (KHÔNG dispose trong CancelXxx —
-    /// vì async method còn đang awaiting, dispose sớm có thể throw <see cref="ObjectDisposedException"/>).
+    /// Đếm giờ chạy trên vòng Update của package (<see cref="FrameLoop"/>), tự dừng khi host bị destroy.
     /// </summary>
     [Serializable]
     public class CooldownBehavior : BehaviorModuleBase
@@ -50,8 +47,8 @@ namespace DreamTech.UICore.Behaviors
         private int _currentCharges;
         private float _chargeRecoveryRemaining;
 
-        private CancellationTokenSource _timeCooldownCts;
-        private CancellationTokenSource _chargeRecoveryCts;
+        private FrameLoopHandle _timeCooldownLoop;
+        private FrameLoopHandle _chargeRecoveryLoop;
 
         public bool IsReady => cooldownType == CooldownBehaviorType.TimeBased ? !_isOnCooldown : _currentCharges > 0;
         public int CurrentCharges => _currentCharges;
@@ -101,9 +98,7 @@ namespace DreamTech.UICore.Behaviors
             onCooldownStart?.Invoke();
             if (host != null) host.SetInteractable(false);
 
-            _timeCooldownCts = CancellationTokenSource.CreateLinkedTokenSource(
-                host != null ? host.GetCancellationTokenOnDestroy() : default);
-            RunTimeCooldownAsync(_timeCooldownCts).Forget();
+            _timeCooldownLoop = FrameLoop.Run(host, TickTimeCooldown);
         }
 
         /// <summary>Reset toàn bộ state: cancel cooldown/recovery, restore charges, re-enable host.</summary>
@@ -133,107 +128,68 @@ namespace DreamTech.UICore.Behaviors
             onChargesChanged?.Invoke(_currentCharges);
 
             // Start recovery loop nếu chưa chạy
-            bool needNewLoop = _chargeRecoveryCts == null;
-            if (!needNewLoop)
-            {
-                try { needNewLoop = _chargeRecoveryCts.IsCancellationRequested; }
-                catch (ObjectDisposedException) { needNewLoop = true; }
-            }
-            if (needNewLoop)
+            if (_chargeRecoveryLoop == null || !_chargeRecoveryLoop.IsRunning)
             {
                 _chargeRecoveryRemaining = chargeRecoveryTime;
                 CancelChargeRecovery();
-                _chargeRecoveryCts = CancellationTokenSource.CreateLinkedTokenSource(
-                    host != null ? host.GetCancellationTokenOnDestroy() : default);
-                RunChargeRecoveryAsync(_chargeRecoveryCts).Forget();
+                _chargeRecoveryLoop = FrameLoop.Run(host, TickChargeRecovery);
             }
 
             if (_currentCharges <= 0 && host != null)
                 host.SetInteractable(false);
         }
 
-        private async UniTaskVoid RunTimeCooldownAsync(CancellationTokenSource cts)
+        /// <summary>Một khung của cooldown theo thời gian: trừ giờ, cập nhật overlay, hết giờ thì mở lại nút.</summary>
+        private bool TickTimeCooldown(float deltaTime, float unscaledDeltaTime)
         {
-            var ct = cts.Token;
-            try
-            {
-                while (_cooldownRemaining > 0)
-                {
-                    ct.ThrowIfCancellationRequested();
-                    await UniTask.Yield(PlayerLoopTiming.Update, ct);
-                    _cooldownRemaining -= Time.deltaTime;
-                    if (overlay != null) overlay.SetProgress(Progress01);
-                }
-                _cooldownRemaining = 0f;
-                _isOnCooldown = false;
-                if (overlay != null) overlay.SetProgress(1f);
-                onCooldownEnd?.Invoke();
-                if (host != null) host.SetInteractable(true);
-            }
-            catch (OperationCanceledException) { /* destroyed or reset */ }
-            finally
-            {
-                cts.Dispose();
-                if (ReferenceEquals(_timeCooldownCts, cts)) _timeCooldownCts = null;
-            }
+            _cooldownRemaining -= deltaTime;
+            if (overlay != null) overlay.SetProgress(Progress01);
+            if (_cooldownRemaining > 0) return true;
+
+            _cooldownRemaining = 0f;
+            _isOnCooldown = false;
+            if (overlay != null) overlay.SetProgress(1f);
+            onCooldownEnd?.Invoke();
+            if (host != null) host.SetInteractable(true);
+            return false;
         }
 
-        private async UniTaskVoid RunChargeRecoveryAsync(CancellationTokenSource cts)
+        /// <summary>Một khung của hồi charge: đủ giờ thì cộng một charge; đầy thì dừng.</summary>
+        private bool TickChargeRecovery(float deltaTime, float unscaledDeltaTime)
         {
-            var ct = cts.Token;
-            try
+            if (_currentCharges >= maxCharges) return false;
+
+            _chargeRecoveryRemaining -= deltaTime;
+            if (overlay != null)
+                overlay.SetProgress(1f - (_chargeRecoveryRemaining / chargeRecoveryTime));
+            if (_chargeRecoveryRemaining > 0) return true;
+
+            _currentCharges++;
+            onChargesChanged?.Invoke(_currentCharges);
+            if (_currentCharges < maxCharges)
             {
-                while (_currentCharges < maxCharges)
-                {
-                    while (_chargeRecoveryRemaining > 0)
-                    {
-                        ct.ThrowIfCancellationRequested();
-                        await UniTask.Yield(PlayerLoopTiming.Update, ct);
-                        _chargeRecoveryRemaining -= Time.deltaTime;
-                        if (overlay != null)
-                            overlay.SetProgress(1f - (_chargeRecoveryRemaining / chargeRecoveryTime));
-                    }
-                    _currentCharges++;
-                    onChargesChanged?.Invoke(_currentCharges);
-                    if (_currentCharges < maxCharges)
-                    {
-                        _chargeRecoveryRemaining = chargeRecoveryTime;
-                    }
-                    else if (overlay != null)
-                    {
-                        overlay.SetProgress(1f);
-                    }
-                    // vừa từ 0 → 1: re-enable host
-                    if (_currentCharges == 1 && host != null)
-                        host.SetInteractable(true);
-                }
+                _chargeRecoveryRemaining = chargeRecoveryTime;
             }
-            catch (OperationCanceledException) { /* destroyed or reset */ }
-            finally
+            else if (overlay != null)
             {
-                cts.Dispose();
-                if (ReferenceEquals(_chargeRecoveryCts, cts)) _chargeRecoveryCts = null;
+                overlay.SetProgress(1f);
             }
+            // vừa từ 0 → 1: re-enable host
+            if (_currentCharges == 1 && host != null)
+                host.SetInteractable(true);
+            return _currentCharges < maxCharges;
         }
 
         private void CancelTimeCooldown()
         {
-            if (_timeCooldownCts != null)
-            {
-                try { if (!_timeCooldownCts.IsCancellationRequested) _timeCooldownCts.Cancel(); }
-                catch (ObjectDisposedException) { }
-                _timeCooldownCts = null;
-            }
+            _timeCooldownLoop?.Cancel();
+            _timeCooldownLoop = null;
         }
 
         private void CancelChargeRecovery()
         {
-            if (_chargeRecoveryCts != null)
-            {
-                try { if (!_chargeRecoveryCts.IsCancellationRequested) _chargeRecoveryCts.Cancel(); }
-                catch (ObjectDisposedException) { }
-                _chargeRecoveryCts = null;
-            }
+            _chargeRecoveryLoop?.Cancel();
+            _chargeRecoveryLoop = null;
         }
     }
 }

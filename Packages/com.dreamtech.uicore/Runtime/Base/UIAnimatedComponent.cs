@@ -119,7 +119,7 @@ namespace DreamTech.UICore.Base
                     completedCount++;
                     // Remove completed handle from _activeHandles so future StopActiveAnimations
                     // doesn't call Stop() on a handle whose CancellationTokenSource is already
-                    // disposed (UniTask backend disposes CTS in MarkCompleted).
+                    // disposed (backend giải phóng handle khi xong).
                     _activeHandles.Remove(capturedHandle);
                     if (completedCount >= totalCount)
                         animationEvents.InvokeComplete();

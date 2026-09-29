@@ -5,7 +5,35 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.0] - 2026-09-29
+## [0.9.0] - 2026-09-29
+
+### Changed
+- **UniTask is now optional.** The package needs only uGUI and TextMeshPro.
+  - New default backend **`DefaultAnimationBackend`**: same timing as before (the first frame writes t = 0, the last writes the exact end value), `TimeMode`, `Stop` vs `Interrupt`, and it stops when the host is destroyed. `AnimationBackendRegistry.Current` defaults to it.
+  - `UniTaskAnimationBackend` moved to the optional assembly **`DreamTech.UICore.UniTask`**, compiled only when the `com.cysharp.unitask` package is installed (or when the scripting define `DREAMTECH_UICORE_UNITASK` is set, e.g. for a `.unitypackage` install).
+  - `CooldownBehavior`, `LongPressBehavior`, `HoldRepeatBehavior`, `AnimationSequence`, `CooldownOverlay` and `AdvancedProgressBar` run on the package's own per-frame loop instead of UniTask. Timing is unchanged: scaled vs unscaled time as before, and loops end when their host is destroyed.
+  - `package.json` no longer lists UniTask.
+  - **Migration:** code in an asmdef that uses `UniTaskAnimationBackend` must add a reference to `DreamTech.UICore.UniTask`, or switch to `DefaultAnimationBackend`.
+- `Stop()` on a `DefaultAnimationBackend` tween puts the value back at once. The UniTask backend did it one frame later, so a value set right after `Stop()` could be overwritten.
+
+### Added
+- **`ButtonFeedback` inspector**, in the same style as the Animated Button inspector (header, tabs, cards):
+  - **Checks with one-click fixes**: nothing receives touches; a Transition, Animator or AnimatedButton also scales the button; Scale Mode Target without a target; a button inside a scroll list with no press delay.
+  - **Edit-mode preview** (Press, Release, Tap) in a scene or Prefab Mode. It runs the real component and then restores scale, touch area and auto-filled references, so nothing is saved.
+  - **Scale-over-time graph** with the pressed scale, the release moment and the overshoot peak. A **Hold** slider shows quick taps too.
+  - Edit the shared profile in place; **New…** creates a profile asset from the numbers in use.
+  - Play Mode tools: phase, scale factor, Press / Release / Tap buttons, and whether a cue handler is set.
+- **`ButtonFeedbackProfile` inspector**: presets (Punchy, Default, Subtle, Soft), the graph, and settings grouped by motion, timing, input, sound and filters.
+- **`PressScaleModule`** for `AnimatedButton` and other module components. It reads a `ButtonFeedbackProfile`, so both kinds of button squeeze the same way: separate press and release duration and curve, release overshoot, and real time when the profile says so.
+- **Tap** button in the Animation-tab preview panel (`PreviewSession.PreviewTap`): Pressed, a hold, then Normal in one session, so the release animation is visible.
+- `ButtonFeedbackProfile.SampleTap(hold, step)` → `TapShape` (lowest scale, peak, peak time, release and end times). It uses the exact per-frame math of `ButtonFeedback`.
+- Optional interfaces:
+  - `ITimeModeAnimationBackend.WithTimeMode(mode)`: run one tween on a different clock.
+  - `IAnimationDurationHint.GetDuration(state)`: a module reports its per-state duration to the preview.
+
+### Fixed
+- The preview panel could throw `ArgumentException` on a component whose modules were of different types: the reflected `duration` field was cached from the first module type. It is now cached per type, and `IAnimationDurationHint` is asked first.
+- `AdvancedProgressBar.StopPulse()` did not stop the pulse while the bar was still full; the loop started the next beat.
 
 ### Added
 - **`ButtonFeedback`** — press feedback that attaches to an existing `Button` / `Toggle` (does not replace it):

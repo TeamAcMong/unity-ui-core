@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace DreamTech.UICore.Feedback
@@ -26,7 +27,6 @@ namespace DreamTech.UICore.Feedback
     [CreateAssetMenu(menuName = "DreamTech/UI Core/Button Feedback Profile", fileName = "ButtonFeedbackProfile")]
     public sealed class ButtonFeedbackProfile : ScriptableObject
     {
-        [Header("Nhún")]
         [SerializeField] private PressMotion _motion = PressMotion.Timed;
 
         [Tooltip("Cỡ lúc nhấn giữ, nhân với cỡ gốc.")]
@@ -47,11 +47,9 @@ namespace DreamTech.UICore.Feedback
         [Tooltip("Follow: tốc độ đuổi theo cỡ đích (/giây).")]
         [SerializeField, Min(0.1f)] private float _followSpeed = 20f;
 
-        [Header("Thời gian")]
         [Tooltip("Chạy theo giờ thật: UI mở lúc game slow-motion / pause vẫn nhún đúng nhịp.")]
         [SerializeField] private bool _useUnscaledTime = true;
 
-        [Header("Nút trong vùng cuộn (ScrollRect)")]
         [Tooltip("Chờ bấy nhiêu giây mới nhún nút nằm trong ScrollRect — nếu ngón tay kéo trong lúc chờ thì là cuộn, không " +
                  "nhún. 0 = nhún ngay.")]
         [SerializeField, Min(0f)] private float _scrollPressDelay = 0.06f;
@@ -59,15 +57,12 @@ namespace DreamTech.UICore.Feedback
         [Tooltip("ScrollRect đang trôi nhanh hơn mức này (px/giây) thì chạm là để dừng cuộn, không nhún.")]
         [SerializeField, Min(0f)] private float _scrollVelocityThreshold = 10f;
 
-        [Header("Nút có sẵn")]
         [Tooltip("Tắt Animator và đặt Transition của Selectable về None khi gắn — tránh hai thứ cùng co một nút.")]
         [SerializeField] private bool _takeOverTransition = true;
 
-        [Header("Âm / rung")]
         [Tooltip("Khoá gửi cho ButtonFeedbackCues.Handler khi nút được bấm. Trống = không phát.")]
         [SerializeField] private string _clickCueKey = "click";
 
-        [Header("Loại trừ")]
         [Tooltip("Object có tên kết thúc bằng hậu tố này: RegisterAll bỏ qua, chế độ Children không co.")]
         [SerializeField] private string _excludeSuffix = "_noFeedback";
 
@@ -130,6 +125,131 @@ namespace DreamTech.UICore.Feedback
         public static AnimationCurve DefaultReleaseCurve()
         {
             return new AnimationCurve(new Keyframe(0f, 0f, 0f, 4f), new Keyframe(0.4f, 1.5f, 0f, 0f), new Keyframe(1f, 1f, 0f, 0f));
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Nhịp — MỘT chỗ tính cho ButtonFeedback, biểu đồ của inspector và test
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>Dưới ngưỡng này coi như đã tới cỡ đích (lerp mũ không bao giờ tới đúng).</summary>
+        internal const float SettleThreshold = 0.0005f;
+
+        /// <summary>
+        /// Hệ số cỡ sau một bước của pha nhấn (<paramref name="pressing"/>) hoặc pha nhả. <paramref name="elapsed"/> là thời gian của
+        /// pha tính cả bước này, <paramref name="startFactor"/> là hệ số lúc pha bắt đầu. <paramref name="finished"/>: đã co tới cỡ
+        /// nhấn (pha nhấn) / đã về nghỉ (pha nhả).
+        /// </summary>
+        internal float Step(bool pressing, float startFactor, float currentFactor, float elapsed, float deltaTime, out bool finished)
+        {
+            if (_motion == PressMotion.Follow)
+            {
+                float goal = pressing ? _pressedScale : 1f;
+                float next = Mathf.Lerp(currentFactor, goal, Mathf.Clamp01(deltaTime * _followSpeed));
+                finished = Mathf.Abs(next - goal) < SettleThreshold;
+                return finished ? goal : next;
+            }
+
+            if (pressing)
+            {
+                float progress = _pressDuration <= 0f ? 1f : Mathf.Clamp01(elapsed / _pressDuration);
+                finished = progress >= 1f;
+                return Mathf.LerpUnclamped(startFactor, _pressedScale, Evaluate(_pressCurve, progress));
+            }
+
+            float releaseProgress = _releaseDuration <= 0f ? 1f : Mathf.Clamp01(elapsed / _releaseDuration);
+            finished = releaseProgress >= 1f;
+            return finished ? 1f : Mathf.LerpUnclamped(startFactor, 1f, Evaluate(_releaseCurve, releaseProgress));
+        }
+
+        private static float Evaluate(AnimationCurve curve, float progress)
+        {
+            return curve != null && curve.length > 0 ? curve.Evaluate(progress) : progress;
+        }
+
+        /// <summary>Hình dạng một cú chạm (kết quả của <see cref="SampleTap"/>).</summary>
+        public readonly struct TapShape
+        {
+            public TapShape(float lowest, float peak, float peakAfterRelease, float releaseTime, float endTime)
+            {
+                Lowest = lowest;
+                Peak = peak;
+                PeakAfterRelease = peakAfterRelease;
+                ReleaseTime = releaseTime;
+                EndTime = endTime;
+            }
+
+            /// <summary>Cỡ nhỏ nhất lúc đang giữ — chạm nhanh thì có thể chưa co tới <see cref="PressedScale"/>.</summary>
+            public float Lowest { get; }
+
+            /// <summary>Cỡ lớn nhất sau khi nhả; 1 = không vọt.</summary>
+            public float Peak { get; }
+
+            /// <summary>Giây từ lúc nhả tới đỉnh.</summary>
+            public float PeakAfterRelease { get; }
+
+            /// <summary>Giây (tính từ lúc chạm) lúc nhả.</summary>
+            public float ReleaseTime { get; }
+
+            /// <summary>Giây (tính từ lúc chạm) lúc về nghỉ hẳn.</summary>
+            public float EndTime { get; }
+
+            /// <summary>Nhả có vọt quá cỡ gốc không.</summary>
+            public bool Overshoots => Peak > 1f + SettleThreshold;
+        }
+
+        /// <summary>
+        /// Mô phỏng một cú chạm đúng như <see cref="ButtonFeedback"/> chạy: chạm, giữ <paramref name="holdSeconds"/> giây, nhả, tới lúc
+        /// về nghỉ — mỗi bước <paramref name="step"/> giây. <paramref name="samples"/> (nếu có) nhận từng điểm (giây, hệ số cỡ).
+        /// Dùng cho biểu đồ của inspector và cho test; không đụng tới scene.
+        /// </summary>
+        public TapShape SampleTap(float holdSeconds, float step = 1f / 120f, List<Vector2> samples = null)
+        {
+            const float MaxSeconds = 10f;
+            holdSeconds = Mathf.Max(0f, holdSeconds);
+            step = Mathf.Max(0.0005f, step);
+            samples?.Clear();
+            samples?.Add(new Vector2(0f, 1f));
+
+            float time = 0f;
+            float factor = 1f;
+            float startFactor = 1f;
+            float elapsed = 0f;
+            bool pressing = true;
+            float lowest = 1f;
+            float releaseTime = holdSeconds;
+            float peak = 1f;
+            float peakTime = 0f;
+
+            while (time < MaxSeconds)
+            {
+                if (pressing && time >= holdSeconds - 0.00001f)
+                {
+                    pressing = false;
+                    startFactor = factor;
+                    elapsed = 0f;
+                    releaseTime = time;
+                    peak = factor;
+                }
+
+                time += step;
+                elapsed += step;
+                factor = Step(pressing, startFactor, factor, elapsed, step, out bool finished);
+                samples?.Add(new Vector2(time, factor));
+
+                if (pressing)
+                {
+                    lowest = Mathf.Min(lowest, factor);
+                    continue;
+                }
+                if (factor > peak)
+                {
+                    peak = factor;
+                    peakTime = time - releaseTime;
+                }
+                if (finished) break;
+            }
+
+            return new TapShape(lowest, Mathf.Max(peak, 1f), peakTime, releaseTime, time);
         }
     }
 }

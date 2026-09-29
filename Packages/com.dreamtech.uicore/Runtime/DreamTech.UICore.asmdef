@@ -2,8 +2,7 @@
     "name": "DreamTech.UICore",
     "rootNamespace": "DreamTech.UICore",
     "references": [
-        "Unity.TextMeshPro",
-        "UniTask"
+        "Unity.TextMeshPro"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

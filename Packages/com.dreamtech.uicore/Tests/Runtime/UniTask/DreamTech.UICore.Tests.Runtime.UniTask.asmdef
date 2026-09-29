@@ -1,0 +1,30 @@
+{
+    "name": "DreamTech.UICore.Tests.Runtime.UniTask",
+    "rootNamespace": "DreamTech.UICore.Tests",
+    "references": [
+        "DreamTech.UICore",
+        "DreamTech.UICore.UniTask",
+        "UnityEngine.UI",
+        "UnityEngine.TestRunner"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
+        "DREAMTECH_UICORE_UNITASK"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.cysharp.unitask",
+            "expression": "",
+            "define": "DREAMTECH_UICORE_UNITASK"
+        }
+    ],
+    "noEngineReferences": false
+}

@@ -1,8 +1,8 @@
 # Unity UI Core
 
-> Modular UI framework for Unity with UniTask backend. Plug-in animation & behavior modules via Inspector — no code required for common cases.
+> Modular UI framework for Unity uGUI — no third-party dependency (UniTask optional). Plug-in animation & behavior modules via Inspector — no code required for common cases.
 
-[![Version](https://img.shields.io/badge/version-0.8.0-blue.svg)](https://github.com/TeamAcMong/unity-ui-core/releases)
+[![Version](https://img.shields.io/badge/version-0.9.0-blue.svg)](https://github.com/TeamAcMong/unity-ui-core/releases)
 [![Unity](https://img.shields.io/badge/unity-2022.3%2B-black.svg)](https://unity.com/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -12,11 +12,14 @@
   - **Animation Modules** — visual feedback: Scale, Color, Position, Rotation, Fade, Punch, Shake
   - **Behavior Modules** — interaction gating: Cooldown, LongPress, MultiClick, HoldRepeat
 - **Custom modules trivial** — implement interface + `[Serializable]`, auto-appear in Inspector dropdown
-- **UniTask backend** — zero DOTween dependency, linked cancellation on GameObject destroy
+- **No third-party dependency** — built-in backend on the package's own update loop; UniTask is optional (`UniTaskAnimationBackend` switches on when the UniTask package is installed)
 - **Hybrid architecture** — control types separate (Button, Toggle), behaviors composable
 - **Components included:** AnimatedButton, AnimatedToggle, AdvancedProgressBar, CooldownOverlay
 - **ButtonFeedback** — press feedback for the uGUI `Button` / `Toggle` you already have: shared profiles, press/release curves with a
-  small overshoot, touch area that does not shrink with the art, scroll-aware presses, and a single hook for click sound / haptics
+  small overshoot, touch area that does not shrink with the art, scroll-aware presses, and a single hook for click sound / haptics.
+  Inspector with setup checks and fixes, **in-scene preview** (Press / Release / Tap), a scale-over-time graph and profile presets
+- **PressScaleModule** — the same squeeze for `AnimatedButton`, driven by the same `ButtonFeedbackProfile`; the Animation-tab preview
+  has a **Tap** button that shows press and release together
 - **Virtual List / Grid** — `VirtualListView` and `VirtualGridView` keep views only for visible items (10 000 items ≈ a few dozen views):
   four directions, mixed item types, fixed / per-template / adapter / measured sizes with scroll anchoring, nearest or paged snapping,
   scroll-to-index, focus and load-more events, nested scroll hand-off, and an editor with **edit-mode preview**, snap diagram, scene
@@ -32,7 +35,7 @@
 2. Click **`+`** → **Add package from git URL**
 3. Paste:
    ```
-   https://github.com/TeamAcMong/unity-ui-core.git#0.8.0
+   https://github.com/TeamAcMong/unity-ui-core.git#0.9.0
    ```
 
 ### Via manifest.json
@@ -40,8 +43,7 @@
 ```json
 {
   "dependencies": {
-    "com.dreamtech.uicore": "https://github.com/TeamAcMong/unity-ui-core.git#0.8.0",
-    "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
+    "com.dreamtech.uicore": "https://github.com/TeamAcMong/unity-ui-core.git#0.9.0"
   }
 }
 ```
@@ -52,7 +54,11 @@
 https://github.com/TeamAcMong/unity-ui-core.git
 ```
 
-> **Requirements:** Unity 2022.3+ (tested on 2022.3.62f2 and 6000.5.7f1), UniTask (auto-installed as dependency).
+> **Requirements:** Unity 2022.3+ (tested on 2022.3.62f2 and 6000.5.7f1, with and without UniTask). uGUI + TextMeshPro only.
+>
+> **Optional UniTask:** install `com.cysharp.unitask` (e.g. `https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask`)
+> and the assembly `DreamTech.UICore.UniTask` with `UniTaskAnimationBackend` compiles automatically. Installed UniTask as a
+> `.unitypackage`? Add the scripting define `DREAMTECH_UICORE_UNITASK`.
 
 ## 🔘 Button Feedback (existing uGUI buttons)
 
@@ -67,8 +73,9 @@ ButtonFeedbackCues.Handler = (source, key) =>           // the package plays no 
 ButtonFeedback.RegisterAll(popupRoot);                  // every Button/Toggle under the popup
 ```
 
-Or select a popup and use *GameObject ▸ DreamTech UI Core ▸ Add Button Feedback To Buttons Under Selection*. Details in the
-[package README](Packages/com.dreamtech.uicore/README.md).
+Or select a popup and use *GameObject ▸ DreamTech UI Core ▸ Add Button Feedback To Buttons Under Selection*. The inspector checks the
+setup (with fixes), previews the squeeze in the scene without entering Play, and graphs the scale over time. For `AnimatedButton`, add
+the **Press Scale** module with the same profile. Details in the [package README](Packages/com.dreamtech.uicore/README.md).
 
 ## 📜 Virtual List / Grid
 
@@ -157,6 +164,8 @@ Both auto-appear in respective dropdowns. **No registration required.**
 // Bootstrap — swap to DOTween wrapper (implement IAnimationBackend)
 AnimationBackendRegistry.Current = new DOTweenAnimationBackend();
 ```
+
+Default: `DefaultAnimationBackend` (no dependency). With UniTask installed you may use `UniTaskAnimationBackend` instead — same behaviour.
 
 ## 📚 Documentation
 

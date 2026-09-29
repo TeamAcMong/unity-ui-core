@@ -47,9 +47,6 @@ namespace DreamTech.UICore.Feedback
             Releasing,
         }
 
-        /// <summary>Dưới ngưỡng này coi như đã tới cỡ đích (lerp mũ không bao giờ tới đúng).</summary>
-        private const float SettleThreshold = 0.0005f;
-
         [Tooltip("Bộ số dùng chung. Trống = ButtonFeedback.DefaultProfile (game đặt) hoặc profile mặc định của package.")]
         [SerializeField] private ButtonFeedbackProfile _profile;
 
@@ -313,44 +310,17 @@ namespace DreamTech.UICore.Feedback
 
             if (_phase == Phase.Idle) return;
             _elapsed += deltaTime;
-            bool reachedPressed = false;
-
-            if (profile.Motion == PressMotion.Follow)
-            {
-                float goal = _phase == Phase.Pressing ? profile.PressedScale : 1f;
-                _factor = Mathf.Lerp(_factor, goal, Mathf.Clamp01(deltaTime * profile.FollowSpeed));
-                if (Mathf.Abs(_factor - goal) < SettleThreshold)
-                {
-                    _factor = goal;
-                    if (_phase == Phase.Releasing) _phase = Phase.Idle;
-                    else reachedPressed = true;
-                }
-            }
-            else if (_phase == Phase.Pressing)
-            {
-                float progress = profile.PressDuration <= 0f ? 1f : Mathf.Clamp01(_elapsed / profile.PressDuration);
-                _factor = Mathf.LerpUnclamped(_phaseStartFactor, profile.PressedScale, Evaluate(profile.PressCurve, progress));
-                reachedPressed = progress >= 1f;
-            }
-            else
-            {
-                float progress = profile.ReleaseDuration <= 0f ? 1f : Mathf.Clamp01(_elapsed / profile.ReleaseDuration);
-                _factor = progress >= 1f ? 1f : Mathf.LerpUnclamped(_phaseStartFactor, 1f, Evaluate(profile.ReleaseCurve, progress));
-                if (progress >= 1f) _phase = Phase.Idle;
-            }
+            bool pressing = _phase == Phase.Pressing;
+            _factor = profile.Step(pressing, _phaseStartFactor, _factor, _elapsed, deltaTime, out bool finished);
+            if (finished && !pressing) _phase = Phase.Idle;
 
             ApplyFactor();
 
-            if (reachedPressed && _releaseAfterPress)
+            if (finished && pressing && _releaseAfterPress)
             {
                 _releaseAfterPress = false;
                 Release();
             }
-        }
-
-        private static float Evaluate(AnimationCurve curve, float progress)
-        {
-            return curve != null && curve.length > 0 ? curve.Evaluate(progress) : progress;
         }
 
         private void BeginPress()
@@ -521,6 +491,46 @@ namespace DreamTech.UICore.Feedback
         {
             return !string.IsNullOrEmpty(suffix) && !string.IsNullOrEmpty(name) &&
                    name.EndsWith(suffix, System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Xem trước trong Edit mode (inspector gọi)
+        // ─────────────────────────────────────────────────────────────────────
+
+        private bool _editorPreviewing;
+        private Selectable _previewSavedSelectable;
+        private Graphic _previewSavedHitGraphic;
+
+        /// <summary>Đang được inspector cho nhún thử trong Edit mode.</summary>
+        internal bool IsEditorPreviewing => _editorPreviewing;
+
+        /// <summary>Pha hiện tại cho bảng theo dõi của inspector: Idle / Pending / Pressing / Releasing.</summary>
+        internal string PhaseLabel => _pressPending ? "Pending" : _phase.ToString();
+
+        /// <summary>
+        /// Inspector bắt đầu cho nhún thử: nhớ hai ô tham chiếu mà lần chạm đầu tự điền (<c>_selectable</c>, <c>_hitGraphic</c>) để
+        /// lúc thôi trả lại y nguyên — xem thử không được để lại thay đổi nào trên scene.
+        /// </summary>
+        internal void BeginEditorPreview()
+        {
+            if (_editorPreviewing) return;
+            _editorPreviewing = true;
+            _previewSavedSelectable = _selectable;
+            _previewSavedHitGraphic = _hitGraphic;
+        }
+
+        /// <summary>Inspector thôi nhún thử: về nghỉ (cỡ, vùng chạm) và trả lại các ô tham chiếu như trước lúc xem.</summary>
+        internal void EndEditorPreview()
+        {
+            if (!_editorPreviewing) return;
+            ResetImmediate();
+            _selectable = _previewSavedSelectable;
+            _hitGraphic = _previewSavedHitGraphic;
+            _previewSavedSelectable = null;
+            _previewSavedHitGraphic = null;
+            _referencesResolved = false;
+            _restCaptured = false;
+            _editorPreviewing = false;
         }
     }
 }
