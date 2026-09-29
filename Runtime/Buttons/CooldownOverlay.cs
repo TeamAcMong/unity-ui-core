@@ -1,6 +1,3 @@
-using System;
-using System.Threading;
-using Cysharp.Threading.Tasks;
 using DreamTech.UICore.Base;
 using TMPro;
 using UnityEngine;
@@ -11,7 +8,7 @@ namespace DreamTech.UICore.Buttons
     /// <summary>
     /// Cooldown progress overlay. Set target progress, hiển thị mượt với MoveTowards.
     /// Hỗ trợ Image filled hoặc Sliced fill mode.
-    /// KHÔNG dùng Update — UniTask smooth loop chỉ chạy khi cần catch-up.
+    /// KHÔNG dùng Update — vòng làm mượt (<see cref="FrameLoop"/>) chỉ chạy khi cần catch-up.
     /// </summary>
     [RequireComponent(typeof(RectTransform))]
     public class CooldownOverlay : UIAnimatedComponent
@@ -29,8 +26,8 @@ namespace DreamTech.UICore.Buttons
         private float _currentDisplayProgress = 1f;
         private float _targetProgress = 1f;
 
-        private CancellationTokenSource _smoothCts;
-        private bool _isSmoothing;
+        private FrameLoopHandle _smoothLoop;
+        private bool IsSmoothing => _smoothLoop != null && _smoothLoop.IsRunning;
 
         protected override void Awake()
         {
@@ -50,7 +47,7 @@ namespace DreamTech.UICore.Buttons
         {
             _targetProgress = Mathf.Clamp01(value);
             if (Mathf.Approximately(_currentDisplayProgress, _targetProgress)) return;
-            if (_isSmoothing) return;  // loop đang chạy sẽ tự catch up
+            if (IsSmoothing) return;  // loop đang chạy sẽ tự catch up
             StartSmoothLoop();
         }
 
@@ -66,43 +63,25 @@ namespace DreamTech.UICore.Buttons
         private void StartSmoothLoop()
         {
             CancelSmoothLoop();
-            _smoothCts = CancellationTokenSource.CreateLinkedTokenSource(
-                this.GetCancellationTokenOnDestroy());
-            RunSmoothLoopAsync(_smoothCts.Token).Forget();
+            _smoothLoop = FrameLoop.Run(this, TickSmooth);
         }
 
-        private async UniTaskVoid RunSmoothLoopAsync(CancellationToken ct)
+        private bool TickSmooth(float deltaTime, float unscaledDeltaTime)
         {
-            _isSmoothing = true;
-            try
-            {
-                while (!Mathf.Approximately(_currentDisplayProgress, _targetProgress))
-                {
-                    ct.ThrowIfCancellationRequested();
-                    await UniTask.Yield(PlayerLoopTiming.Update, ct);
-                    _currentDisplayProgress = Mathf.MoveTowards(
-                        _currentDisplayProgress, _targetProgress, smoothSpeed * Time.deltaTime);
-                    ApplyVisual(_currentDisplayProgress);
-                }
-                // snap để loại bỏ epsilon drift
-                _currentDisplayProgress = _targetProgress;
-                ApplyVisual(_currentDisplayProgress);
-            }
-            catch (OperationCanceledException) { /* destroyed or replaced */ }
-            finally
-            {
-                _isSmoothing = false;
-            }
+            _currentDisplayProgress = Mathf.MoveTowards(_currentDisplayProgress, _targetProgress, smoothSpeed * deltaTime);
+            ApplyVisual(_currentDisplayProgress);
+            if (!Mathf.Approximately(_currentDisplayProgress, _targetProgress)) return true;
+
+            // snap để loại bỏ epsilon drift
+            _currentDisplayProgress = _targetProgress;
+            ApplyVisual(_currentDisplayProgress);
+            return false;
         }
 
         private void CancelSmoothLoop()
         {
-            if (_smoothCts != null)
-            {
-                _smoothCts.Cancel();
-                _smoothCts.Dispose();
-                _smoothCts = null;
-            }
+            _smoothLoop?.Cancel();
+            _smoothLoop = null;
         }
 
         private void ApplyVisual(float progress)

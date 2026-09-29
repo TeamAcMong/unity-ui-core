@@ -6,7 +6,9 @@ Modular UI framework cho Unity với 2 plugin patterns đối xứng:
 
 Add module qua Inspector dropdown — không cần code cho common cases. Custom module: implement interface + `[Serializable]`, auto xuất hiện trong dropdown.
 
-> UniTask declared as git dependency in `package.json`. If UPM blocks it, install manually: `https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask`.
+> **Không bắt buộc package ngoài.** Chỉ cần uGUI + TextMeshPro. UniTask là **tuỳ chọn**: project có package `com.cysharp.unitask`
+> thì có thêm `UniTaskAnimationBackend` (assembly `DreamTech.UICore.UniTask` tự bật); cài UniTask bằng `.unitypackage` thì thêm
+> scripting define `DREAMTECH_UICORE_UNITASK`. Không có UniTask, mọi thứ chạy trên vòng Update của package.
 
 ## Components
 
@@ -45,6 +47,20 @@ ButtonFeedback.RegisterAll(popupRoot);
 | Khoá âm riêng / tắt âm cho một nút | Component | `SetCue(key)` / `SetCue(null, mute: true)` |
 
 Menu: *GameObject ▸ DreamTech UI Core ▸ Add Button Feedback To Buttons Under Selection* (có Undo).
+
+**Editor** (cùng khuôn với Animated Button — header, tab, thẻ):
+- **Kiểm cấu hình kèm nút sửa:** không có gì nhận chạm, Transition / Animator / AnimatedButton cùng co một nút, Scale Mode thiếu
+  đích, nút trong danh sách cuộn mà không chờ.
+- **Nhún thử ngay trong Scene / Prefab Mode** (Press · Release · Tap): chạy đúng component thật rồi trả lại y nguyên — không lưu gì.
+- **Biểu đồ cỡ theo thời gian** (vạch cỡ nhấn, lúc nhả, đỉnh vọt); kéo **Hold** để thấy cả cú chạm nhanh.
+- **Chỉnh profile ngay từ nút**, nút *New…* tạo profile từ số đang dùng; inspector của profile có **preset** (Punchy · Default ·
+  Subtle · Soft).
+- Bảng Play Mode: pha hiện tại, hệ số cỡ, nút Press / Release / Tap.
+
+**AnimatedButton nhún y hệt:** thêm module **Press Scale** và trỏ vào cùng `ButtonFeedbackProfile` — nhấn / nhả có thời lượng +
+đường cong riêng như `ButtonFeedback` (module Scale thường chỉ có một đường cong cho mọi chiều). Bảng xem trước của AnimatedButton
+có nút **Tap** (Pressed → Normal) để xem cả nhịp nhả. Nút nằm trong danh sách cuộn vẫn nên dùng Button + `ButtonFeedback` (chờ
+trước khi nhún, giữ vùng chạm).
 
 ## Virtual List / Grid (list ảo hoá)
 
@@ -187,12 +203,14 @@ Behaviors có UnityEvent riêng (ví dụ `LongPressBehavior.onLongPress`, `Cool
 AnimationBackendRegistry.Current = new DOTweenAnimationBackend();
 ```
 
-Default backend: `UniTaskAnimationBackend` (zero DOTween dependency, linked CTS cancel khi GameObject destroy).
+Default backend: `DefaultAnimationBackend` — không cần package nào, chạy trên vòng Update của package, tự dừng khi host bị destroy.
+Project có UniTask có thể dùng `UniTaskAnimationBackend` (cùng hành vi).
 
-UI cần giữ nhịp khi game slow-motion / pause: chạy backend theo giờ thật.
+UI cần giữ nhịp khi game slow-motion / pause: chạy backend theo giờ thật (module `Press Scale` tự chạy theo giờ thật nếu profile
+bảo vậy, qua `ITimeModeAnimationBackend`).
 
 ```csharp
-AnimationBackendRegistry.Current = new UniTaskAnimationBackend { TimeMode = AnimationTimeMode.Unscaled };
+AnimationBackendRegistry.Current = new DefaultAnimationBackend { TimeMode = AnimationTimeMode.Unscaled };
 ```
 
 Dừng tween: `Stop()` trả target về giá trị đầu; `IInterruptibleAnimationHandle.Interrupt()` giữ nguyên chỗ (component dùng cái này
@@ -201,11 +219,15 @@ khi đổi state, nên nhấn/nhả liên tiếp đi tiếp từ cỡ hiện t�
 ## Built-in Modules
 
 **Animation modules:**
-`ScaleModule`, `ColorModule`, `PositionModule`, `RotationModule`, `FadeModule`, `PunchModule`, `ShakeModule`
+`ScaleModule`, `PressScaleModule`, `ColorModule`, `PositionModule`, `RotationModule`, `FadeModule`, `PunchModule`, `ShakeModule`
+
+Module có thời lượng khác nhau theo state thì implement thêm `IAnimationDurationHint` để bảng xem trước biết lúc nào xong.
 
 **Behavior modules:**
 `CooldownBehavior` (Time/Charge based), `LongPressBehavior`, `MultiClickBehavior`, `HoldRepeatBehavior`
 
 ## Version
 
-`0.8.0` — `ButtonFeedback` cho nút uGUI có sẵn, list / grid ảo hoá (`VirtualListView`, `VirtualGridView`) có editor xem trước, backend giờ thật, ngắt tween giữ nguyên chỗ. Xem `CHANGELOG.md`.
+`0.9.0` — UniTask thành tuỳ chọn (backend mặc định + vòng Update riêng), inspector chuẩn cho `ButtonFeedback` / profile (kiểm
+cấu hình, nhún thử trong Scene, biểu đồ, preset), module `Press Scale` cho AnimatedButton, nút Tap trong bảng xem trước. Xem
+`CHANGELOG.md`.

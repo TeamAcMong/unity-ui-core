@@ -7,10 +7,13 @@ using UnityEngine;
 namespace DreamTech.UICore.Animations.Backends
 {
     /// <summary>
-    /// Default IAnimationBackend implementation dùng UniTask thay coroutine.
-    /// Zero DOTween dependency. Tất cả tween chạy trên PlayerLoopTiming.Update.
+    /// IAnimationBackend chạy trên UniTask (PlayerLoopTiming.Update) — TUỲ CHỌN: nằm trong assembly
+    /// <c>DreamTech.UICore.UniTask</c>, chỉ biên dịch khi project có package <c>com.cysharp.unitask</c> (hoặc tự khai báo define
+    /// <c>DREAMTECH_UICORE_UNITASK</c> khi cài UniTask bằng .unitypackage). Hành vi giống <see cref="DefaultAnimationBackend"/> —
+    /// backend mặc định của package, không cần UniTask.
+    /// <code>AnimationBackendRegistry.Current = new UniTaskAnimationBackend();</code>
     /// </summary>
-    public sealed class UniTaskAnimationBackend : IAnimationBackend
+    public sealed class UniTaskAnimationBackend : ITimeModeAnimationBackend
     {
         /// <summary>
         /// Đồng hồ chạy tween. <see cref="AnimationTimeMode.Scaled"/> (mặc định, giữ hành vi cũ) chậm/dừng theo
@@ -19,6 +22,18 @@ namespace DreamTech.UICore.Animations.Backends
         /// <code>AnimationBackendRegistry.Current = new UniTaskAnimationBackend { TimeMode = AnimationTimeMode.Unscaled };</code>
         /// </summary>
         public AnimationTimeMode TimeMode { get; set; } = AnimationTimeMode.Scaled;
+
+        private UniTaskAnimationBackend _scaledClock;
+        private UniTaskAnimationBackend _unscaledClock;
+
+        /// <summary>Chính nó nếu cùng đồng hồ, không thì một backend anh em (tạo một lần) chạy theo <paramref name="mode"/>.</summary>
+        public IAnimationBackend WithTimeMode(AnimationTimeMode mode)
+        {
+            if (mode == TimeMode) return this;
+            return mode == AnimationTimeMode.Unscaled
+                ? _unscaledClock ??= new UniTaskAnimationBackend { TimeMode = AnimationTimeMode.Unscaled }
+                : _scaledClock ??= new UniTaskAnimationBackend { TimeMode = AnimationTimeMode.Scaled };
+        }
 
         private static float DeltaTime(bool unscaled) => unscaled ? Time.unscaledDeltaTime : Time.deltaTime;
 

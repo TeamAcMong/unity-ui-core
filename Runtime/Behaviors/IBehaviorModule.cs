@@ -36,7 +36,7 @@ namespace DreamTech.UICore.Behaviors
         /// <param name="newState">State mà host vừa chuyển sang.</param>
         void OnPointerStateChanged(UIState newState);
 
-        /// <summary>Cleanup khi host bị destroy. Cancel pending UniTask, unsubscribe events.</summary>
+        /// <summary>Cleanup khi host bị destroy. Huỷ vòng đếm giờ đang chạy, unsubscribe events.</summary>
         void Dispose();
     }
 }

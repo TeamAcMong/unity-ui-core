@@ -1,6 +1,4 @@
 using System;
-using System.Threading;
-using Cysharp.Threading.Tasks;
 using DreamTech.UICore.Animations.Backends;
 using DreamTech.UICore.Base;
 using TMPro;
@@ -76,7 +74,7 @@ namespace DreamTech.UICore.ProgressBars
 
     /// <summary>
     /// Progress bar đa năng: animated value lerp, 4 fill mode, 3 color mode,
-    /// optional text, flash + pulse effect, full UniTask-based — KHÔNG coroutine.
+    /// optional text, flash + pulse effect, chạy trên vòng Update của package (FrameLoop) — KHÔNG coroutine, không cần UniTask.
     /// <para>
     /// Kế thừa <see cref="UIAnimatedComponent"/> nên vẫn có thể attach
     /// animation modules ngoài qua Inspector (ví dụ punch khi value đổi).
@@ -168,7 +166,7 @@ namespace DreamTech.UICore.ProgressBars
         private IAnimationHandle _flashHandle;
         private IAnimationHandle _pulseHandle;
 
-        private CancellationTokenSource _valueAnimCts;
+        private FrameLoopHandle _valueAnimLoop;
         private Color _originalFillColor;
         private Vector3 _overlayInitialScale = Vector3.one;
 
@@ -318,75 +316,73 @@ namespace DreamTech.UICore.ProgressBars
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        // Value animation (UniTask-based)
+        // Value animation (vòng Update của package — FrameLoop)
         // ─────────────────────────────────────────────────────────────────────
 
         private void StartValueAnimation()
         {
+            // Huỷ là bình thường: object destroyed, SetValue gọi lại, hoặc SetValue(animate:false).
             CancelValueAnimation();
-            _valueAnimCts = CancellationTokenSource.CreateLinkedTokenSource(
-                this.GetCancellationTokenOnDestroy());
-            RunValueAnimationAsync(_valueAnimCts.Token).Forget();
-        }
 
-        private async UniTaskVoid RunValueAnimationAsync(CancellationToken ct)
-        {
-            try
+            if (valueAnimationMode == ValueAnimationMode.Spring)
             {
-                if (valueAnimationMode == ValueAnimationMode.Spring)
+                if (!IsSpringMoving())
+                {
+                    FinishValueAnimation(_targetValue, resetVelocity: true);
+                    return;
+                }
+                _valueAnimLoop = FrameLoop.Run(this, (deltaTime, unscaledDeltaTime) =>
                 {
                     // Mass-spring-damper: F = -kx - cv, with k = ω², c = 2ζω.
-                    while (!Mathf.Approximately(_displayValue, _targetValue)
-                           || Mathf.Abs(_springVelocity) > 0.001f)
-                    {
-                        ct.ThrowIfCancellationRequested();
-                        await UniTask.Yield(PlayerLoopTiming.Update, ct);
-                        float dt = Time.deltaTime;
-                        float displacement = _targetValue - _displayValue;
-                        float springForce = displacement * springFrequency * springFrequency;
-                        float dampingForce = -2f * springDamping * springFrequency * _springVelocity;
-                        _springVelocity += (springForce + dampingForce) * dt;
-                        _displayValue += _springVelocity * dt;
-                        UpdateVisual(_displayValue);
-                    }
-                    _displayValue = _targetValue;
-                    _springVelocity = 0f;
-                }
-                else
-                {
-                    float startValue = _displayValue;
-                    float endValue = _targetValue;
-                    float elapsed = 0f;
-                    while (elapsed < animationDuration
-                           && !Mathf.Approximately(_displayValue, endValue))
-                    {
-                        ct.ThrowIfCancellationRequested();
-                        await UniTask.Yield(PlayerLoopTiming.Update, ct);
-                        elapsed += Time.deltaTime;
-                        float t = animationDuration > 0f
-                            ? Mathf.Clamp01(elapsed / animationDuration)
-                            : 1f;
-                        if (valueAnimationMode == ValueAnimationMode.EaseInOut)
-                            t = Mathf.SmoothStep(0f, 1f, t);
-                        _displayValue = Mathf.Lerp(startValue, endValue, t);
-                        UpdateVisual(_displayValue);
-                    }
-                    _displayValue = endValue;
-                }
-                UpdateVisual(_displayValue);
+                    float displacement = _targetValue - _displayValue;
+                    float springForce = displacement * springFrequency * springFrequency;
+                    float dampingForce = -2f * springDamping * springFrequency * _springVelocity;
+                    _springVelocity += (springForce + dampingForce) * deltaTime;
+                    _displayValue += _springVelocity * deltaTime;
+                    UpdateVisual(_displayValue);
+                    if (IsSpringMoving()) return true;
+                    FinishValueAnimation(_targetValue, resetVelocity: true);
+                    return false;
+                });
+                return;
             }
-            catch (OperationCanceledException)
+
+            float startValue = _displayValue;
+            float endValue = _targetValue;
+            float elapsed = 0f;
+            if (!(elapsed < animationDuration && !Mathf.Approximately(_displayValue, endValue)))
             {
-                // Cancel là expected khi: object destroyed, SetValue gọi lại, hoặc SetValue(animate:false).
+                FinishValueAnimation(endValue, resetVelocity: false);
+                return;
             }
+            _valueAnimLoop = FrameLoop.Run(this, (deltaTime, unscaledDeltaTime) =>
+            {
+                elapsed += deltaTime;
+                float t = animationDuration > 0f ? Mathf.Clamp01(elapsed / animationDuration) : 1f;
+                if (valueAnimationMode == ValueAnimationMode.EaseInOut)
+                    t = Mathf.SmoothStep(0f, 1f, t);
+                _displayValue = Mathf.Lerp(startValue, endValue, t);
+                UpdateVisual(_displayValue);
+                if (elapsed < animationDuration && !Mathf.Approximately(_displayValue, endValue)) return true;
+                FinishValueAnimation(endValue, resetVelocity: false);
+                return false;
+            });
+        }
+
+        private bool IsSpringMoving() =>
+            !Mathf.Approximately(_displayValue, _targetValue) || Mathf.Abs(_springVelocity) > 0.001f;
+
+        private void FinishValueAnimation(float finalValue, bool resetVelocity)
+        {
+            _displayValue = finalValue;
+            if (resetVelocity) _springVelocity = 0f;
+            UpdateVisual(_displayValue);
         }
 
         private void CancelValueAnimation()
         {
-            if (_valueAnimCts == null) return;
-            _valueAnimCts.Cancel();
-            _valueAnimCts.Dispose();
-            _valueAnimCts = null;
+            _valueAnimLoop?.Cancel();
+            _valueAnimLoop = null;
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -566,53 +562,40 @@ namespace DreamTech.UICore.ProgressBars
             if (overlayImage == null) return;
             if (_pulseHandle != null && _pulseHandle.IsPlaying) return;
 
-            PulseLoop(this.GetCancellationTokenOnDestroy()).Forget();
+            PulseHalf(towardsPeak: true);
         }
 
-        private async UniTaskVoid PulseLoop(CancellationToken ct)
+        /// <summary>
+        /// Một nửa nhịp đập (base → peak hoặc peak → base); xong tự nhiên thì chạy nửa kia. Dừng khi thanh hết đầy, overlay mất,
+        /// <see cref="StopPulse"/> (tween bị dừng thì không báo xong) hoặc object bị destroy.
+        /// </summary>
+        private void PulseHalf(bool towardsPeak)
         {
-            var backend = AnimationBackendRegistry.Current;
-            try
+            if (this == null || overlayImage == null || !IsFull)
             {
-                while (IsFull && !ct.IsCancellationRequested && overlayImage != null)
-                {
-                    Vector3 baseScale = _overlayInitialScale;
-                    Vector3 peakScale = baseScale * pulseScale;
-                    float halfDuration = Mathf.Max(0.0001f, pulseDuration * 0.5f);
-
-                    // ↑ base → peak
-                    _pulseHandle = backend.TweenVector3(this, baseScale, peakScale, halfDuration,
-                        v => { if (overlayImage != null) overlayImage.transform.localScale = v; });
-                    {
-                        // Capture local để closure WaitUntil ổn định kể cả khi _pulseHandle bị overwrite.
-                        var h = _pulseHandle;
-                        await UniTask.WaitUntil(
-                            () => h == null || !h.IsPlaying || h.IsCompleted,
-                            cancellationToken: ct);
-                    }
-
-                    if (ct.IsCancellationRequested || !IsFull || overlayImage == null) break;
-
-                    // ↓ peak → base
-                    _pulseHandle = backend.TweenVector3(this, peakScale, baseScale, halfDuration,
-                        v => { if (overlayImage != null) overlayImage.transform.localScale = v; });
-                    {
-                        var h = _pulseHandle;
-                        await UniTask.WaitUntil(
-                            () => h == null || !h.IsPlaying || h.IsCompleted,
-                            cancellationToken: ct);
-                    }
-                }
+                EndPulse();
+                return;
             }
-            catch (OperationCanceledException)
+
+            Vector3 baseScale = _overlayInitialScale;
+            Vector3 peakScale = baseScale * pulseScale;
+            float halfDuration = Mathf.Max(0.0001f, pulseDuration * 0.5f);
+            IAnimationHandle handle = AnimationBackendRegistry.Current.TweenVector3(this,
+                towardsPeak ? baseScale : peakScale, towardsPeak ? peakScale : baseScale, halfDuration,
+                v => { if (overlayImage != null) overlayImage.transform.localScale = v; });
+            _pulseHandle = handle;
+            handle.OnComplete(() =>
             {
-                // Destroy hoặc StopPulse — expected.
-            }
-            finally
-            {
-                if (overlayImage != null) overlayImage.transform.localScale = _overlayInitialScale;
-                _pulseHandle = null;
-            }
+                // Pulse đã bị StopPulse / thay bằng nhịp khác thì thôi.
+                if (!ReferenceEquals(_pulseHandle, handle)) return;
+                PulseHalf(!towardsPeak);
+            });
+        }
+
+        private void EndPulse()
+        {
+            if (overlayImage != null) overlayImage.transform.localScale = _overlayInitialScale;
+            _pulseHandle = null;
         }
 
         /// <summary>Force stop pulse loop và restore overlay scale.</summary>

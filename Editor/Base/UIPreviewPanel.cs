@@ -64,14 +64,22 @@ namespace DreamTech.UICore.Editor.Base
 
                 if (GUILayout.Button(
                         new GUIContent(" ▶ Play", "Run all enabled animation modules for this state"),
-                        GUILayout.Height(22f), GUILayout.MinWidth(80f)))
+                        GUILayout.Height(22f), GUILayout.MinWidth(70f)))
                 {
                     PreviewSession.PreviewState(target, _selectedState, () => editor.Repaint());
                 }
 
                 if (GUILayout.Button(
+                        new GUIContent(" ▶ Tap", "Pressed, hold until the press finishes, then Normal — shows the release too " +
+                                                 "(e.g. an overshoot), which previewing Normal alone cannot"),
+                        GUILayout.Height(22f), GUILayout.MinWidth(60f)))
+                {
+                    PreviewSession.PreviewTap(target, PreviewSession.SuggestedTapHold(target), () => editor.Repaint());
+                }
+
+                if (GUILayout.Button(
                         new GUIContent(" ↺ Reset", "Restore initial state"),
-                        GUILayout.Height(22f), GUILayout.MinWidth(70f)))
+                        GUILayout.Height(22f), GUILayout.MinWidth(60f)))
                 {
                     PreviewSession.CancelActive();
                     editor.Repaint();

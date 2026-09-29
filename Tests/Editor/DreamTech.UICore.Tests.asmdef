@@ -3,6 +3,7 @@
     "rootNamespace": "DreamTech.UICore.Tests",
     "references": [
         "DreamTech.UICore",
+        "DreamTech.UICore.Editor",
         "UnityEngine.UI",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"

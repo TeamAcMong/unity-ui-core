@@ -1,7 +1,6 @@
 using System;
-using System.Threading;
-using Cysharp.Threading.Tasks;
 using DreamTech.UICore.Animations;
+using DreamTech.UICore.Base;
 using UnityEngine;
 using UnityEngine.Events;
 
@@ -27,7 +26,7 @@ namespace DreamTech.UICore.Behaviors
         public override string DisplayName => "Long Press";
 
         private bool _longPressTriggered;
-        private CancellationTokenSource _detectCts;
+        private FrameLoopHandle _detectLoop;
 
         public override void OnPointerStateChanged(UIState newState)
         {
@@ -64,48 +63,27 @@ namespace DreamTech.UICore.Behaviors
         {
             StopDetection();
             _longPressTriggered = false;
-            _detectCts = CancellationTokenSource.CreateLinkedTokenSource(
-                host != null ? host.GetCancellationTokenOnDestroy() : default);
-            RunDetectionAsync(_detectCts).Forget();
+
+            // Giờ thật: giữ đủ threshold giây thì bắn. Nhả / rời nút / host bị destroy trước đó thì tiến độ về 0.
+            float elapsed = 0f;
+            onProgress?.Invoke(0f);
+            _detectLoop = FrameLoop.Run(host, (deltaTime, unscaledDeltaTime) =>
+            {
+                elapsed += unscaledDeltaTime;
+                onProgress?.Invoke(Mathf.Clamp01(elapsed / threshold));
+                if (elapsed < threshold) return true;
+
+                _longPressTriggered = true;
+                onLongPress?.Invoke();
+                onProgress?.Invoke(1f);
+                return false;
+            }, () => onProgress?.Invoke(0f));
         }
 
         private void StopDetection()
         {
-            if (_detectCts != null)
-            {
-                try { if (!_detectCts.IsCancellationRequested) _detectCts.Cancel(); }
-                catch (ObjectDisposedException) { }
-                _detectCts = null;
-            }
-        }
-
-        private async UniTaskVoid RunDetectionAsync(CancellationTokenSource cts)
-        {
-            var ct = cts.Token;
-            try
-            {
-                float elapsed = 0f;
-                onProgress?.Invoke(0f);
-                while (elapsed < threshold)
-                {
-                    ct.ThrowIfCancellationRequested();
-                    await UniTask.Yield(PlayerLoopTiming.Update, ct);
-                    elapsed += Time.unscaledDeltaTime;
-                    onProgress?.Invoke(Mathf.Clamp01(elapsed / threshold));
-                }
-                _longPressTriggered = true;
-                onLongPress?.Invoke();
-                onProgress?.Invoke(1f);
-            }
-            catch (OperationCanceledException)
-            {
-                onProgress?.Invoke(0f);
-            }
-            finally
-            {
-                cts.Dispose();
-                if (ReferenceEquals(_detectCts, cts)) _detectCts = null;
-            }
+            _detectLoop?.Cancel();
+            _detectLoop = null;
         }
     }
 }

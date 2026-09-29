@@ -1,7 +1,6 @@
 using System;
-using System.Threading;
-using Cysharp.Threading.Tasks;
 using DreamTech.UICore.Animations;
+using DreamTech.UICore.Base;
 using UnityEngine;
 using UnityEngine.Events;
 
@@ -34,7 +33,7 @@ namespace DreamTech.UICore.Behaviors
 
         public override string DisplayName => "Hold Repeat";
 
-        private CancellationTokenSource _repeatCts;
+        private FrameLoopHandle _repeatLoop;
 
         public override void OnPointerStateChanged(UIState newState)
         {
@@ -57,52 +56,37 @@ namespace DreamTech.UICore.Behaviors
         private void StartRepeating()
         {
             StopRepeating();
-            _repeatCts = CancellationTokenSource.CreateLinkedTokenSource(
-                host != null ? host.GetCancellationTokenOnDestroy() : default);
-            RunRepeatAsync(_repeatCts).Forget();
+
+            // Giờ thật (không theo timeScale): chờ initialDelay, bắn, rồi chờ từng khoảng (nhanh dần nếu bật accelerate).
+            float waitRemaining = initialDelay;
+            float elapsedSinceStart = 0f;
+            float lastInterval = 0f;
+            bool fired = false;
+
+            _repeatLoop = FrameLoop.Run(host, (deltaTime, unscaledDeltaTime) =>
+            {
+                waitRemaining -= unscaledDeltaTime;
+                if (waitRemaining > 0f) return true;
+
+                if (fired) elapsedSinceStart += lastInterval;
+                fired = true;
+                onRepeat?.Invoke();
+
+                lastInterval = repeatInterval;
+                if (accelerate)
+                {
+                    float t = Mathf.Clamp01(elapsedSinceStart / accelerateDuration);
+                    lastInterval = Mathf.Lerp(repeatInterval, repeatInterval * minIntervalRatio, t);
+                }
+                waitRemaining = lastInterval;
+                return true;
+            });
         }
 
         private void StopRepeating()
         {
-            if (_repeatCts != null)
-            {
-                try { if (!_repeatCts.IsCancellationRequested) _repeatCts.Cancel(); }
-                catch (ObjectDisposedException) { }
-                _repeatCts = null;
-            }
-        }
-
-        private async UniTaskVoid RunRepeatAsync(CancellationTokenSource cts)
-        {
-            var ct = cts.Token;
-            try
-            {
-                // Initial delay before first repeat
-                await UniTask.Delay(TimeSpan.FromSeconds(initialDelay), ignoreTimeScale: true, cancellationToken: ct);
-
-                float elapsedSinceStart = 0f;
-                while (true)
-                {
-                    ct.ThrowIfCancellationRequested();
-                    onRepeat?.Invoke();
-
-                    float currentInterval = repeatInterval;
-                    if (accelerate)
-                    {
-                        float t = Mathf.Clamp01(elapsedSinceStart / accelerateDuration);
-                        currentInterval = Mathf.Lerp(repeatInterval, repeatInterval * minIntervalRatio, t);
-                    }
-
-                    await UniTask.Delay(TimeSpan.FromSeconds(currentInterval), ignoreTimeScale: true, cancellationToken: ct);
-                    elapsedSinceStart += currentInterval;
-                }
-            }
-            catch (OperationCanceledException) { /* released */ }
-            finally
-            {
-                cts.Dispose();
-                if (ReferenceEquals(_repeatCts, cts)) _repeatCts = null;
-            }
+            _repeatLoop?.Cancel();
+            _repeatLoop = null;
         }
     }
 }

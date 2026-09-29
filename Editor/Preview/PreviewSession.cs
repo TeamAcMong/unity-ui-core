@@ -56,6 +56,12 @@ namespace DreamTech.UICore.Editor.Preview
             public Action OnComplete;
             public string Label;
 
+            /// <summary>State phát tiếp trong cùng phiên (xem trước Tap: Pressed rồi Normal); null = không có.</summary>
+            public UIState? PendingState;
+
+            /// <summary>Giây (tính từ đầu phiên) lúc phát <see cref="PendingState"/>.</summary>
+            public float PendingAt;
+
             public float GetProgress()
             {
                 if (MaxDuration <= 0f) return 1f;
@@ -92,8 +98,8 @@ namespace DreamTech.UICore.Editor.Preview
         // Cached reflection: animationModules field on UIAnimatedComponent
         private static FieldInfo _animationModulesField;
 
-        // Cached reflection: duration field on AnimationModuleBase
-        private static FieldInfo _moduleDurationField;
+        // Cached reflection: `duration` field per module type (null = type has none)
+        private static readonly Dictionary<Type, FieldInfo> _moduleDurationFields = new Dictionary<Type, FieldInfo>();
 
         // ─────────────────────────────────────────────────────────────────────
         // Public API
@@ -133,8 +139,47 @@ namespace DreamTech.UICore.Editor.Preview
                 return;
             }
 
-            session.MaxDuration = EstimateMaxModuleDuration(component);
+            session.MaxDuration = EstimateMaxModuleDuration(component, targetState);
             ScheduleAutoRestore(session);
+        }
+
+        /// <summary>
+        /// Preview a tap: Pressed, hold for <paramref name="holdSeconds"/>, then Normal — in one session, so the release (e.g. an
+        /// overshoot) plays from the pressed values. Previewing Normal on its own starts from the rest values and shows nothing.
+        /// </summary>
+        /// <param name="component">Scene instance of the UIAnimatedComponent to preview.</param>
+        /// <param name="holdSeconds">Seconds between Pressed and Normal.</param>
+        /// <param name="onComplete">Optional callback invoked when the session ends (natural or cancelled).</param>
+        public static void PreviewTap(UIAnimatedComponent component, float holdSeconds, Action onComplete = null)
+        {
+            if (component == null) return;
+            if (!IsSceneInstance(component))
+            {
+                Debug.LogWarning("[PreviewSession] Preview requires a scene instance, not a prefab asset.");
+                return;
+            }
+
+            CancelActive();
+
+            var method = GetPlayAnimationsForStateMethod();
+            if (method == null)
+            {
+                Debug.LogWarning("[PreviewSession] Could not find PlayAnimationsForState via reflection.");
+                return;
+            }
+
+            var session = StartSessionScaffolding(component, $"{component.GetType().Name} Tap (Pressed → Normal)", onComplete);
+            method.Invoke(component, new object[] { UIState.Pressed });
+            session.PendingState = UIState.Normal;
+            session.PendingAt = Mathf.Max(0f, holdSeconds);
+            session.MaxDuration = session.PendingAt + EstimateMaxModuleDuration(component, UIState.Normal);
+            ScheduleAutoRestore(session);
+        }
+
+        /// <summary>Hold time that lets every enabled module finish its Pressed animation, plus a short visible pause.</summary>
+        public static float SuggestedTapHold(UIAnimatedComponent component)
+        {
+            return component == null ? 0.2f : EstimateMaxModuleDuration(component, UIState.Pressed) + 0.1f;
         }
 
         /// <summary>
@@ -164,7 +209,7 @@ namespace DreamTech.UICore.Editor.Preview
             module.CaptureInitialValue(component);
             var handle = module.Play(component, targetState, session.PreviewBackend);
 
-            session.MaxDuration = EstimateModuleDuration(module);
+            session.MaxDuration = EstimateModuleDuration(module, targetState);
 
             // End session when the module handle completes naturally
             if (handle != null)
@@ -293,6 +338,14 @@ namespace DreamTech.UICore.Editor.Preview
             }
 
             double elapsed = EditorApplication.timeSinceStartup - _activeSession.StartTime;
+
+            if (_activeSession.PendingState.HasValue && elapsed >= _activeSession.PendingAt)
+            {
+                UIState pending = _activeSession.PendingState.Value;
+                _activeSession.PendingState = null;
+                if (_activeSession.Target != null)
+                    GetPlayAnimationsForStateMethod()?.Invoke(_activeSession.Target, new object[] { pending });
+            }
             // Small buffer (0.15s) accounts for the final-value writes the tween does on its last tick
             if (elapsed > _activeSession.MaxDuration + 0.15f)
             {
@@ -384,10 +437,10 @@ namespace DreamTech.UICore.Editor.Preview
         // ─────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Reflects the <c>animationModules</c> list on <paramref name="component"/> and returns
-        /// the maximum <c>duration</c> field across all enabled modules. Falls back to 1.0 s.
+        /// Reflects the <c>animationModules</c> list on <paramref name="component"/> and returns the longest duration across
+        /// all enabled modules for <paramref name="state"/>. Falls back to 1.0 s.
         /// </summary>
-        private static float EstimateMaxModuleDuration(UIAnimatedComponent component)
+        internal static float EstimateMaxModuleDuration(UIAnimatedComponent component, UIState state)
         {
             var modulesField = GetAnimationModulesField();
             if (modulesField == null) return 1f;
@@ -399,18 +452,19 @@ namespace DreamTech.UICore.Editor.Preview
             foreach (var m in modules)
             {
                 if (m == null || !m.Enabled) continue;
-                float d = EstimateModuleDuration(m);
+                float d = EstimateModuleDuration(m, state);
                 if (d > max) max = d;
             }
             return max > 0f ? max : 1f;
         }
 
         /// <summary>
-        /// Reflects the <c>duration</c> field from <see cref="AnimationModuleBase"/> on <paramref name="module"/>.
-        /// Falls back to 0.5 s if reflection fails or the module is not an <see cref="AnimationModuleBase"/>.
+        /// How long <paramref name="module"/> animates towards <paramref name="state"/>: asks <see cref="IAnimationDurationHint"/>
+        /// first, then reflects a float <c>duration</c> field (e.g. <see cref="AnimationModuleBase"/>). Falls back to 0.5 s.
         /// </summary>
-        internal static float EstimateModuleDuration(IAnimationModule module)
+        internal static float EstimateModuleDuration(IAnimationModule module, UIState state)
         {
+            if (module is IAnimationDurationHint hint) return Mathf.Max(0f, hint.GetDuration(state));
             var field = GetModuleDurationField(module);
             if (field != null && field.GetValue(module) is float d) return d;
             return 0.5f;
@@ -453,21 +507,22 @@ namespace DreamTech.UICore.Editor.Preview
 
         private static FieldInfo GetModuleDurationField(IAnimationModule module)
         {
-            if (_moduleDurationField != null) return _moduleDurationField;
+            // Cached per concrete type: a field found on one module type cannot be read from another (ArgumentException).
+            Type moduleType = module.GetType();
+            if (_moduleDurationFields.TryGetValue(moduleType, out FieldInfo cached)) return cached;
 
-            // Walk up the inheritance chain starting from the concrete type
-            var type = module.GetType();
-            while (type != null && type != typeof(object))
+            FieldInfo found = null;
+            for (var type = moduleType; type != null && type != typeof(object); type = type.BaseType)
             {
                 var field = type.GetField("duration", BindingFlags.NonPublic | BindingFlags.Instance);
                 if (field != null && field.FieldType == typeof(float))
                 {
-                    _moduleDurationField = field;
-                    return _moduleDurationField;
+                    found = field;
+                    break;
                 }
-                type = type.BaseType;
             }
-            return null;
+            _moduleDurationFields[moduleType] = found;
+            return found;
         }
     }
 }

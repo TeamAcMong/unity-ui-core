@@ -1,0 +1,25 @@
+{
+    "name": "DreamTech.UICore.UniTask",
+    "rootNamespace": "DreamTech.UICore",
+    "references": [
+        "DreamTech.UICore",
+        "UniTask"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "DREAMTECH_UICORE_UNITASK"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.cysharp.unitask",
+            "expression": "",
+            "define": "DREAMTECH_UICORE_UNITASK"
+        }
+    ],
+    "noEngineReferences": false
+}
