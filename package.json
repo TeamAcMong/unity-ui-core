@@ -1,15 +1,15 @@
 {
   "name": "com.dreamtech.uicore",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "displayName": "DreamTech UI Core",
-  "description": "Modular UI framework with UniTask backend. Plug-in animation & behavior modules via Inspector. Polished card-based editor with accordion module list, searchable subclass dropdown, theme-aware styles. Includes AnimatedButton, AnimatedToggle, AdvancedProgressBar.",
+  "description": "Modular UI framework with UniTask backend. Plug-in animation & behavior modules via Inspector. Polished card-based editor with accordion module list, searchable subclass dropdown, theme-aware styles. Includes AnimatedButton, AnimatedToggle, AdvancedProgressBar, ButtonFeedback (press feedback for existing uGUI buttons with shared profiles, scroll-aware presses and a sound/haptic cue hook) and virtual scrolling (VirtualListView / VirtualGridView: recycling, measured sizes, snapping, nested scroll, edit-mode preview editor).",
   "unity": "2022.3",
   "dependencies": {
     "com.unity.ugui": "1.0.0",
     "com.unity.textmeshpro": "3.0.6",
     "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask"
   },
-  "keywords": ["ui", "animation", "button", "progressbar", "modular"],
+  "keywords": ["ui", "animation", "button", "progressbar", "modular", "feedback", "scrollview", "virtual-list", "recycling"],
   "author": {
     "name": "DreamTech"
   }

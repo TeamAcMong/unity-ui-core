@@ -48,9 +48,9 @@ namespace DreamTech.UICore.Editor.Preview
             public UIAnimatedComponent Target;
             public PreviewAnimationBackend PreviewBackend;
             public IAnimationBackend OriginalBackend;
-            public Dictionary<int, TransformSnapshot> TransformSnapshots;
-            public Dictionary<int, GraphicSnapshot> GraphicSnapshots;
-            public Dictionary<int, CanvasGroupSnapshot> CanvasGroupSnapshots;
+            public Dictionary<Transform, TransformSnapshot> TransformSnapshots;
+            public Dictionary<Graphic, GraphicSnapshot> GraphicSnapshots;
+            public Dictionary<CanvasGroup, CanvasGroupSnapshot> CanvasGroupSnapshots;
             public float MaxDuration;
             public double StartTime;
             public Action OnComplete;
@@ -306,12 +306,12 @@ namespace DreamTech.UICore.Editor.Preview
         // Snapshot capture
         // ─────────────────────────────────────────────────────────────────────
 
-        private static Dictionary<int, TransformSnapshot> CaptureTransformSnapshots(UIAnimatedComponent component)
+        private static Dictionary<Transform, TransformSnapshot> CaptureTransformSnapshots(UIAnimatedComponent component)
         {
-            var snapshots = new Dictionary<int, TransformSnapshot>();
+            var snapshots = new Dictionary<Transform, TransformSnapshot>();
             foreach (var t in component.GetComponentsInChildren<Transform>(includeInactive: true))
             {
-                snapshots[t.GetInstanceID()] = new TransformSnapshot
+                snapshots[t] = new TransformSnapshot
                 {
                     LocalScale = t.localScale,
                     LocalPosition = t.localPosition,
@@ -321,22 +321,22 @@ namespace DreamTech.UICore.Editor.Preview
             return snapshots;
         }
 
-        private static Dictionary<int, GraphicSnapshot> CaptureGraphicSnapshots(UIAnimatedComponent component)
+        private static Dictionary<Graphic, GraphicSnapshot> CaptureGraphicSnapshots(UIAnimatedComponent component)
         {
-            var snapshots = new Dictionary<int, GraphicSnapshot>();
+            var snapshots = new Dictionary<Graphic, GraphicSnapshot>();
             foreach (var g in component.GetComponentsInChildren<Graphic>(includeInactive: true))
             {
-                snapshots[g.GetInstanceID()] = new GraphicSnapshot { GraphicColor = g.color };
+                snapshots[g] = new GraphicSnapshot { GraphicColor = g.color };
             }
             return snapshots;
         }
 
-        private static Dictionary<int, CanvasGroupSnapshot> CaptureCanvasGroupSnapshots(UIAnimatedComponent component)
+        private static Dictionary<CanvasGroup, CanvasGroupSnapshot> CaptureCanvasGroupSnapshots(UIAnimatedComponent component)
         {
-            var snapshots = new Dictionary<int, CanvasGroupSnapshot>();
+            var snapshots = new Dictionary<CanvasGroup, CanvasGroupSnapshot>();
             foreach (var cg in component.GetComponentsInChildren<CanvasGroup>(includeInactive: true))
             {
-                snapshots[cg.GetInstanceID()] = new CanvasGroupSnapshot { Alpha = cg.alpha };
+                snapshots[cg] = new CanvasGroupSnapshot { Alpha = cg.alpha };
             }
             return snapshots;
         }
@@ -345,18 +345,13 @@ namespace DreamTech.UICore.Editor.Preview
         // Snapshot restore
         // ─────────────────────────────────────────────────────────────────────
 
-        private static void RestoreTransformSnapshots(Dictionary<int, TransformSnapshot> snapshots)
+        private static void RestoreTransformSnapshots(Dictionary<Transform, TransformSnapshot> snapshots)
         {
-            // We cannot look up transforms by instance ID cheaply without holding references,
-            // so we stored all transforms in the snapshot. We need to find them again.
-            // Strategy: walk the scene objects whose IDs appear in snapshots.
-            // Since we captured from a component's GetComponentsInChildren, iterate the same component.
-            // However, _activeSession may already be null when this is called.
-            // Solution: store Transform references instead. The dict key is the instance ID and we can
-            // retrieve the object via EditorUtility.InstanceIDToObject.
+            // Keyed by the object itself (not its instance ID): Unity 6.5 turned GetInstanceID and
+            // EditorUtility.InstanceIDToObject into compile errors, and a destroyed object simply reads as null here.
             foreach (var kv in snapshots)
             {
-                var obj = EditorUtility.InstanceIDToObject(kv.Key) as Transform;
+                var obj = kv.Key;
                 if (obj == null) continue;
                 obj.localScale = kv.Value.LocalScale;
                 obj.localPosition = kv.Value.LocalPosition;
@@ -364,21 +359,21 @@ namespace DreamTech.UICore.Editor.Preview
             }
         }
 
-        private static void RestoreGraphicSnapshots(Dictionary<int, GraphicSnapshot> snapshots)
+        private static void RestoreGraphicSnapshots(Dictionary<Graphic, GraphicSnapshot> snapshots)
         {
             foreach (var kv in snapshots)
             {
-                var obj = EditorUtility.InstanceIDToObject(kv.Key) as Graphic;
+                var obj = kv.Key;
                 if (obj == null) continue;
                 obj.color = kv.Value.GraphicColor;
             }
         }
 
-        private static void RestoreCanvasGroupSnapshots(Dictionary<int, CanvasGroupSnapshot> snapshots)
+        private static void RestoreCanvasGroupSnapshots(Dictionary<CanvasGroup, CanvasGroupSnapshot> snapshots)
         {
             foreach (var kv in snapshots)
             {
-                var obj = EditorUtility.InstanceIDToObject(kv.Key) as CanvasGroup;
+                var obj = kv.Key;
                 if (obj == null) continue;
                 obj.alpha = kv.Value.Alpha;
             }

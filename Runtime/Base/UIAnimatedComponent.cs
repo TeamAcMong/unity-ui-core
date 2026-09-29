@@ -69,7 +69,9 @@ namespace DreamTech.UICore.Base
         /// <param name="newState">State mà component vừa chuyển sang.</param>
         protected void PlayAnimationsForState(UIState newState)
         {
-            StopActiveAnimations();
+            // Ngắt chứ không Stop: animation của state mới đọc giá trị hiện tại làm điểm đầu. Stop trả target về "from"
+            // của animation cũ, nên một cú chạm nhanh (nhả trước khi co xong) làm nút giật về cỡ gốc và mất nhịp nhún.
+            InterruptActiveAnimations();
 
             if (animationModules.Count == 0)
             {
@@ -133,6 +135,20 @@ namespace DreamTech.UICore.Base
         {
             foreach (var handle in _activeHandles)
                 handle?.Stop();
+            _activeHandles.Clear();
+        }
+
+        /// <summary>
+        /// Dừng các animation đang chạy mà giữ target ở giá trị hiện tại (handle hỗ trợ
+        /// <see cref="IInterruptibleAnimationHandle"/>); handle không hỗ trợ thì <see cref="IAnimationHandle.Stop"/> như cũ.
+        /// </summary>
+        protected void InterruptActiveAnimations()
+        {
+            foreach (var handle in _activeHandles)
+            {
+                if (handle is IInterruptibleAnimationHandle interruptible) interruptible.Interrupt();
+                else handle?.Stop();
+            }
             _activeHandles.Clear();
         }
 

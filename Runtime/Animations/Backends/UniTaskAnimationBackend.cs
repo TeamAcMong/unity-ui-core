@@ -12,13 +12,29 @@ namespace DreamTech.UICore.Animations.Backends
     /// </summary>
     public sealed class UniTaskAnimationBackend : IAnimationBackend
     {
+        /// <summary>
+        /// Đồng hồ chạy tween. <see cref="AnimationTimeMode.Scaled"/> (mặc định, giữ hành vi cũ) chậm/dừng theo
+        /// <c>Time.timeScale</c>; <see cref="AnimationTimeMode.Unscaled"/> chạy theo giờ thật — UI mở lúc game đang
+        /// slow-motion hay pause vẫn phản hồi đúng nhịp.
+        /// <code>AnimationBackendRegistry.Current = new UniTaskAnimationBackend { TimeMode = AnimationTimeMode.Unscaled };</code>
+        /// </summary>
+        public AnimationTimeMode TimeMode { get; set; } = AnimationTimeMode.Scaled;
+
+        private static float DeltaTime(bool unscaled) => unscaled ? Time.unscaledDeltaTime : Time.deltaTime;
+
         // ─────────────────────────────────────────────────────────────────────
         // Handle
         // ─────────────────────────────────────────────────────────────────────
 
-        private sealed class UniTaskAnimationHandle : IAnimationHandle
+        private sealed class UniTaskAnimationHandle : IInterruptibleAnimationHandle
         {
             private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+
+            /// <summary>
+            /// Cancel có trả target về giá trị <c>from</c> không. <see cref="Stop"/> = có (hành vi cũ),
+            /// <see cref="Interrupt"/> = không. Punch/Shake luôn trả về (chúng là offset quanh giá trị gốc).
+            /// </summary>
+            public bool RestoreOnCancel { get; private set; } = true;
             private readonly List<Action> _onCompleteCallbacks = new List<Action>();
             private bool _completed;
 
@@ -41,6 +57,13 @@ namespace DreamTech.UICore.Animations.Backends
                     // CTS disposed between MarkCompleted and our IsCancellationRequested check
                     // (race only possible if MarkCompleted runs across thread). Safe to ignore.
                 }
+            }
+
+            public void Interrupt()
+            {
+                if (_completed) return;
+                RestoreOnCancel = false;
+                Stop();
             }
 
             public IAnimationHandle OnComplete(Action callback)
@@ -86,7 +109,7 @@ namespace DreamTech.UICore.Animations.Backends
             var handle = new UniTaskAnimationHandle();
             var linkedCts = CancellationTokenSource
                 .CreateLinkedTokenSource(handle.Token, host.GetCancellationTokenOnDestroy());
-            RunTweenFloat(handle, from, to, duration, onUpdate, curve, onStart, onStep, onComplete, linkedCts).Forget();
+            RunTweenFloat(handle, from, to, duration, onUpdate, curve, onStart, onStep, onComplete, linkedCts, TimeMode == AnimationTimeMode.Unscaled).Forget();
             return handle;
         }
 
@@ -98,7 +121,8 @@ namespace DreamTech.UICore.Animations.Backends
             Action onStart,
             Action<float> onStep,
             Action onComplete,
-            CancellationTokenSource linkedCts)
+            CancellationTokenSource linkedCts,
+            bool unscaled)
         {
             var ct = linkedCts.Token;
             try
@@ -115,7 +139,7 @@ namespace DreamTech.UICore.Animations.Backends
                     onUpdate?.Invoke(v);
                     onStep?.Invoke(t);
                     await UniTask.Yield(PlayerLoopTiming.Update, ct);
-                    elapsed += Time.deltaTime; // deltaTime read after yield = same frame
+                    elapsed += DeltaTime(unscaled); // read after yield = same frame
                 }
 
                 // Final exact value
@@ -127,7 +151,10 @@ namespace DreamTech.UICore.Animations.Backends
             catch (OperationCanceledException)
             {
                 // Restore to 'from' on cancel so caller can decide; silent exit
-                try { onUpdate?.Invoke(from); } catch { /* host may be destroyed */ }
+                if (handle.RestoreOnCancel)
+                {
+                    try { onUpdate?.Invoke(from); } catch { /* host may be destroyed */ }
+                }
             }
             catch (Exception e)
             {
@@ -155,7 +182,7 @@ namespace DreamTech.UICore.Animations.Backends
             var handle = new UniTaskAnimationHandle();
             var linkedCts = CancellationTokenSource
                 .CreateLinkedTokenSource(handle.Token, host.GetCancellationTokenOnDestroy());
-            RunTweenVector3(handle, from, to, duration, onUpdate, curve, onStart, onStep, onComplete, linkedCts).Forget();
+            RunTweenVector3(handle, from, to, duration, onUpdate, curve, onStart, onStep, onComplete, linkedCts, TimeMode == AnimationTimeMode.Unscaled).Forget();
             return handle;
         }
 
@@ -167,7 +194,8 @@ namespace DreamTech.UICore.Animations.Backends
             Action onStart,
             Action<float> onStep,
             Action onComplete,
-            CancellationTokenSource linkedCts)
+            CancellationTokenSource linkedCts,
+            bool unscaled)
         {
             var ct = linkedCts.Token;
             try
@@ -184,7 +212,7 @@ namespace DreamTech.UICore.Animations.Backends
                     onUpdate?.Invoke(v);
                     onStep?.Invoke(t);
                     await UniTask.Yield(PlayerLoopTiming.Update, ct);
-                    elapsed += Time.deltaTime;
+                    elapsed += DeltaTime(unscaled);
                 }
 
                 onUpdate?.Invoke(to);
@@ -194,7 +222,10 @@ namespace DreamTech.UICore.Animations.Backends
             }
             catch (OperationCanceledException)
             {
-                try { onUpdate?.Invoke(from); } catch { }
+                if (handle.RestoreOnCancel)
+                {
+                    try { onUpdate?.Invoke(from); } catch { }
+                }
             }
             catch (Exception e)
             {
@@ -222,7 +253,7 @@ namespace DreamTech.UICore.Animations.Backends
             var handle = new UniTaskAnimationHandle();
             var linkedCts = CancellationTokenSource
                 .CreateLinkedTokenSource(handle.Token, host.GetCancellationTokenOnDestroy());
-            RunTweenColor(handle, from, to, duration, onUpdate, curve, onStart, onStep, onComplete, linkedCts).Forget();
+            RunTweenColor(handle, from, to, duration, onUpdate, curve, onStart, onStep, onComplete, linkedCts, TimeMode == AnimationTimeMode.Unscaled).Forget();
             return handle;
         }
 
@@ -234,7 +265,8 @@ namespace DreamTech.UICore.Animations.Backends
             Action onStart,
             Action<float> onStep,
             Action onComplete,
-            CancellationTokenSource linkedCts)
+            CancellationTokenSource linkedCts,
+            bool unscaled)
         {
             var ct = linkedCts.Token;
             try
@@ -251,7 +283,7 @@ namespace DreamTech.UICore.Animations.Backends
                     onUpdate?.Invoke(v);
                     onStep?.Invoke(t);
                     await UniTask.Yield(PlayerLoopTiming.Update, ct);
-                    elapsed += Time.deltaTime;
+                    elapsed += DeltaTime(unscaled);
                 }
 
                 onUpdate?.Invoke(to);
@@ -261,7 +293,10 @@ namespace DreamTech.UICore.Animations.Backends
             }
             catch (OperationCanceledException)
             {
-                try { onUpdate?.Invoke(from); } catch { }
+                if (handle.RestoreOnCancel)
+                {
+                    try { onUpdate?.Invoke(from); } catch { }
+                }
             }
             catch (Exception e)
             {
@@ -289,7 +324,7 @@ namespace DreamTech.UICore.Animations.Backends
             var handle = new UniTaskAnimationHandle();
             var linkedCts = CancellationTokenSource
                 .CreateLinkedTokenSource(handle.Token, host.GetCancellationTokenOnDestroy());
-            RunPunch(handle, target, punchAmount, duration, vibrato, elasticity, onComplete, linkedCts).Forget();
+            RunPunch(handle, target, punchAmount, duration, vibrato, elasticity, onComplete, linkedCts, TimeMode == AnimationTimeMode.Unscaled).Forget();
             return handle;
         }
 
@@ -301,7 +336,8 @@ namespace DreamTech.UICore.Animations.Backends
             int vibrato,
             float elasticity,
             Action onComplete,
-            CancellationTokenSource linkedCts)
+            CancellationTokenSource linkedCts,
+            bool unscaled)
         {
             if (target == null)
             {
@@ -326,8 +362,8 @@ namespace DreamTech.UICore.Animations.Backends
                 {
                     ct.ThrowIfCancellationRequested();
 
-                    // Advance accumulator BEFORE applying — both use same Time.deltaTime snapshot
-                    float dt = Time.deltaTime;
+                    // Advance accumulator BEFORE applying — both use same delta-time snapshot
+                    float dt = DeltaTime(unscaled);
                     elapsedSinceLastHalfPeriod += dt;
 
                     if (elapsedSinceLastHalfPeriod >= halfPeriod)
@@ -392,7 +428,7 @@ namespace DreamTech.UICore.Animations.Backends
             var handle = new UniTaskAnimationHandle();
             var linkedCts = CancellationTokenSource
                 .CreateLinkedTokenSource(handle.Token, host.GetCancellationTokenOnDestroy());
-            RunShake(handle, target, strength, duration, vibrato, randomness, onComplete, linkedCts).Forget();
+            RunShake(handle, target, strength, duration, vibrato, randomness, onComplete, linkedCts, TimeMode == AnimationTimeMode.Unscaled).Forget();
             return handle;
         }
 
@@ -404,7 +440,8 @@ namespace DreamTech.UICore.Animations.Backends
             int vibrato,
             float randomness,
             Action onComplete,
-            CancellationTokenSource linkedCts)
+            CancellationTokenSource linkedCts,
+            bool unscaled)
         {
             if (target == null)
             {
@@ -430,7 +467,7 @@ namespace DreamTech.UICore.Animations.Backends
                 {
                     ct.ThrowIfCancellationRequested();
 
-                    float dt = Time.deltaTime;
+                    float dt = DeltaTime(unscaled);
                     elapsedSinceLastShake += dt;
 
                     if (elapsedSinceLastShake >= timePerShake)
